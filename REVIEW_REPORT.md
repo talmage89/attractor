@@ -69,7 +69,7 @@ The most actionable findings are the three test gaps (FINDING-001 through FINDIN
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/validation/rules.ts`
 - **Description:** The spec's Section 6.2 `type_known` validation rule lists the following permitted handler types: `start`, `exit`, `codergen`, `conditional`, `wait.human`, `parallel`, `fan.in`, `tool`. The implementation's `KNOWN_TYPES` set also includes `stack.manager_loop`:
 

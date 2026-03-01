@@ -224,13 +224,26 @@ describe("validation", () => {
           e [shape=Msquare]
           a [type="parallel"]
           b [type="parallel.fan_in"]
-          c [type="stack.manager_loop"]
-          s -> a -> b -> c -> e
+          s -> a -> b -> e
         }
       `);
       const diags = validate(graph);
       const rule = diags.filter(d => d.rule === "type_known");
       expect(rule).toHaveLength(0);
+    });
+
+    it("warns on stack.manager_loop (future phase, not yet supported)", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          a [type="stack.manager_loop"]
+          s -> a -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "type_known" && d.severity === "warning");
+      expect(rule.length).toBeGreaterThan(0);
     });
   });
 
