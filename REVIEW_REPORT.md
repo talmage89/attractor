@@ -1,191 +1,147 @@
 # Code Review Report
 
 **Date:** 2026-03-01
-**Reviewer:** AI Agent (eighth-pass)
-**Test Status:** All passing (260/260)
+**Reviewer:** AI Agent (ninth-pass)
+**Test Status:** All passing (263/263)
 
 ## Summary
 
-The codebase is in excellent shape after seven prior review cycles. This eighth-pass review found no critical or high severity issues. One medium-severity issue was identified (the runner unconditionally overwrites caller-registered handlers for start/exit/wait.human, limiting library extensibility). Three low-severity spec compliance gaps and two trivial nits round out the findings.
+The codebase continues to be in excellent shape after eight prior review cycles. This ninth-pass review found no critical or high-severity issues. One medium-severity issue was identified (`parseDurationToMs` relies on object key insertion order to disambiguate `"ms"` from `"s"`). Four low-severity issues round out the findings: a misleading event field, dead code in `autoStatus`, a validation rule that never fires, and an unimplemented spec feature (`previousNodeId` in thread resolution). Two trivial nits close out the report.
 
 ---
 
 ## Findings
 
-### FINDING-001: `runner.ts` unconditionally overwrites caller-registered start/exit/wait.human handlers
+### FINDING-001: `parseDurationToMs` relies on object key insertion order to disambiguate `"ms"` from `"s"`
 
 - **Severity:** MEDIUM
-- **Category:** Correctness / Integration
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:107-109`
-- **Description:** Every call to `run()` unconditionally registers three handlers on the caller-supplied registry:
+- **Category:** Correctness
+- **Status:** OPEN
+- **File(s):** `src/parser/parser.ts:10-26`
+- **Description:** `parseDurationToMs` iterates `Object.entries(DURATION_MS)` and returns on the first matching `.endsWith(suffix)`. Because `"250ms".endsWith("s")` is `true` (the `"s"` entry would also match), the function's correctness depends on `"ms"` being iterated before `"s"`. In V8, non-integer string keys are iterated in insertion order, and `"ms"` appears first in the literal, so this works today. However, the logic is fragile: reordering the `DURATION_MS` object (e.g., alphabetically) or running on a non-V8 engine would cause durations like `"250ms"` to silently return `250000` instead of `250`.
+- **Recommendation:** Sort entries by suffix length descending before iterating, so longer suffixes are always checked first:
   ```typescript
-  registry.register("start", { async execute() { return { status: "success" }; } });
-  registry.register("exit",  { async execute() { return { status: "success" }; } });
-  registry.register("wait.human", new WaitForHumanHandler(config.interviewer));
+  for (const [suffix, multiplier] of Object.entries(DURATION_MS).sort(
+    (a, b) => b[0].length - a[0].length
+  )) {
   ```
-  `HandlerRegistry.register()` is a plain `Map.set()` — it overwrites any previously registered handler for the same key. This means a library user who creates a custom registry, registers a `"start"` handler that performs setup work, then calls `run()`, will have that handler silently replaced with the stub. The same applies to custom `"exit"` or `"wait.human"` handlers. There is no warning or error. The public API (`HandlerRegistry.register()`) implies full control over registered types, but `run()` violates that contract for three specific types.
-  - **Practical impact for `wait.human`:** If a caller registers their own `WaitForHumanHandler` (e.g., with a specialized interviewer or decorated logic), `run()` replaces it with one wrapping `config.interviewer`. The documented contract of passing both `registry` and `interviewer` is inconsistent.
-  - **Practical impact for `start`/`exit`:** The stubs always return success, so overwriting a no-op custom handler has no behavioral effect. But overwriting a setup-performing custom handler silently breaks the caller.
-- **Recommendation:** Change the registration strategy to use conditional registration — only register the built-in handler if no handler for that type has already been registered:
-  ```typescript
-  if (!registry.hasHandler("start")) {
-    registry.register("start", { async execute() { return { status: "success" }; } });
-  }
-  ```
-  This requires adding a `hasHandler(type: string): boolean` method to `HandlerRegistry`. Alternatively, document the overwrite behavior explicitly in the JSDoc for `run()` and `RunConfig`, so callers know not to pre-register these three types.
-- **Resolution:** Added `hasHandler(typeString: string): boolean` to `HandlerRegistry`. Changed the three unconditional `registry.register()` calls in `run()` to conditional ones guarded by `!registry.hasHandler(...)`. Added a test verifying that caller-registered start/exit handlers are not overwritten.
+  This eliminates the insertion-order dependency with a minimal, self-documenting change.
 
 ---
 
-### FINDING-002: `CodergenHandler` fallback success outcome omits spec-specified `notes` and `contextUpdates`
-
-- **Severity:** LOW
-- **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/handlers/codergen.ts:209-218`
-- **Description:** When CC executes successfully but the agent did not write a `status.json` file, the implementation falls back to:
-  ```typescript
-  outcome = { status: "success" };
-  ```
-  The spec (Section 9.5) specifies the fallback should be:
-  ```typescript
-  outcome = {
-    status: "success",
-    notes: `Stage completed: ${node.id}`,
-    contextUpdates: {
-      last_stage: node.id,
-      last_response: ccResult.text.slice(0, 200),
-    },
-  };
-  ```
-  The `last_stage` and `last_response` context keys are useful for downstream stages that need to observe what the previous node did (e.g., a conditional node or a codergen node whose prompt references `$context.last_response`). The current bare fallback provides no context to subsequent stages.
-- **Recommendation:** Update the fallback success case to match the spec, adding `notes` and `contextUpdates` with `last_stage` and `last_response`:
-  ```typescript
-  outcome = {
-    status: "success",
-    notes: `Stage completed: ${node.id}`,
-    contextUpdates: {
-      last_stage: node.id,
-      last_response: ccResult.text.slice(0, 200),
-    },
-  };
-  ```
-
----
-
-### FINDING-003: Exit node handler failure is not reflected in `RunResult.status`
+### FINDING-002: `edge_selected` event `reason` field is inaccurate for non-condition, non-weight selections
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:261-296`
-- **Description:** The terminal branch of the traversal loop executes the exit handler (an intentional spec extension documented in the code), then checks goal gates. However, `finalStatus` is only set to `"fail"` if a goal gate is unsatisfied or the goal gate retry limit is exceeded. If the exit handler returns `{ status: "fail" }`, the outcome is ignored with respect to `finalStatus`, and the pipeline reports `"success"` as long as goal gates are satisfied.
-
-  The `ExitHandler` always returns `{ status: "success" }`, so this has no effect in standard usage. But as a library, a user registering a custom exit handler could reasonably expect that returning `fail` causes the pipeline to fail. The current behavior is surprising and undocumented.
-- **Recommendation:** After executing the exit handler, propagate a `fail` outcome to `finalStatus` if no goal gate retry is triggered:
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:400`
+- **Description:** The `edge_selected` event is emitted with:
   ```typescript
-  if (!gateResult.satisfied && retryTarget && ...) {
-    // retry
-  } else if (!gateResult.satisfied || exitOutcome.status === "fail") {
-    finalStatus = "fail";
-    break loop;
-  } else {
-    break loop;
-  }
+  reason: edge.condition ? "condition" : "weight"
   ```
-  Alternatively, document explicitly (in a JSDoc comment on `run()` or in the code) that exit handler failures are intentionally ignored when goal gates pass.
-- **Resolution:** After the goal-gate check block in the terminal branch, added `if (exitOutcome.status === "fail") { finalStatus = "fail"; }` before `break loop`. Added a test verifying that a custom exit handler returning `fail` causes `RunResult.status` to be `"fail"` even when all goal gates pass.
+  The `selectEdge` algorithm has five steps, two of which do not use conditions or weights: step 2 (preferred-label matching) and step 3 (suggested-next-ids). When an edge is selected via either of those steps, the event incorrectly reports `reason: "weight"`. This is an observability defect that makes pipeline traces misleading for these common selection cases.
+- **Recommendation:** Either extend the `reason` field to include `"preferred_label"` and `"suggested_next"` values (requires `selectEdge` to return the selection method alongside the edge), or widen the type to a string and emit a more accurate value such as `"auto"` when neither condition nor explicit weight was the deciding factor. The minimal fix is:
+  ```typescript
+  reason: edge.condition ? "condition" : "auto"
+  ```
+  which at least removes the false implication that weight was the selection mechanism.
 
 ---
 
-### FINDING-004: `isStartNode` detection in runner.ts is inconsistent with `findStartNode`
+### FINDING-003: `autoStatus` check `!outcome.status` is dead code
 
 - **Severity:** LOW
-- **Category:** Correctness / Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:300`, `src/model/graph.ts:60-67`
-- **Description:** The runner excludes the start node from `completedNodes` and `nodeOutcomes` via this check:
-  ```typescript
-  const isStartNode = currentNode.shape === "Mdiamond" || currentNode.type === "start";
-  ```
-  But `findStartNode` (which determines _which_ node to start execution from) uses different criteria:
-  ```typescript
-  if (node.shape === "Mdiamond") return node;
-  return graph.nodes.get("start") ?? graph.nodes.get("Start") ?? null;
-  ```
-  The validation rule `startNodeRule` also recognizes `id === "start"` or `id === "Start"` as valid start nodes.
+- **Category:** Correctness
+- **Status:** OPEN
+- **File(s):** `src/handlers/codergen.ts:229-232`
+- **Description:** The comment at line 229 reads "if autoStatus and outcome status is somehow undefined, default to success". The check `!outcome.status` can never be true at that point:
+  - If `status.json` was read successfully, `parseStatusFile` always returns an `Outcome` with a `status` field (defaulting to `"success"` if the field is missing or invalid).
+  - If `status.json` was absent or failed to parse, the `catch` block (lines 209-226) always assigns either `{ status: "success", ... }` or `{ status: "fail", ... }`.
 
-  **Consequence:** A node with `id = "start"` (valid start node per spec) but without `shape === "Mdiamond"` and without an explicit `type = "start"` attribute would be:
-  - Correctly found as the start node by `findStartNode` ✓
-  - Correctly flagged as a start node by the validator ✓
-  - Incorrectly **included** in `completedNodes` and `nodeOutcomes` by the runner ✗
-
-  Including the start node in `nodeOutcomes` could trigger incorrect goal gate evaluation if the start node happens to have `goal_gate = true`, or create unexpected entries in checkpoint data.
-- **Recommendation:** Unify the start node detection. The simplest fix is to compare the current node against the result of `findStartNode`:
+  The `autoStatus` guard is therefore permanently dead. A developer reading the code might believe this fallback provides meaningful protection, when in fact it provides none.
+- **Recommendation:** Remove the dead check. If the intent was to detect the "no status file was written" case specifically and auto-succeed, that logic needs to be placed _before_ the `catch` block, using a boolean flag that records whether the file was successfully read, then conditional on `node.autoStatus`:
   ```typescript
-  const isStartNode = currentNode.id === startNode.id;
+  let statusFileFound = false;
+  try {
+    const statusContent = await fs.readFile(statusFilePath, "utf-8");
+    // ...
+    statusFileFound = true;
+  } catch { }
+  if (!statusFileFound && node.autoStatus && ccResult.success) {
+    outcome = { status: "success", notes: `Stage completed: ${node.id}` };
+  }
   ```
-  Or add `id === "start" || id === "Start"` to the `isStartNode` check to match `findStartNode`'s fallback logic.
-- **Resolution:** Changed the `isStartNode` check on runner.ts:310 from the shape/type heuristic to `currentNode.id === startNode.id`, which delegates to the already-computed `startNode` reference. Added a test verifying that a start node named `"start"` (no `shape=Mdiamond`, no `type` attribute) is excluded from `completedNodes`.
 
 ---
 
-### FINDING-005: `handlerTypeFor` in `runner.ts` duplicates `SHAPE_TO_TYPE` from `registry.ts`
+### FINDING-004: `promptOnLlmNodesRule` validation rule effectively never fires
 
-- **Severity:** TRIVIAL
-- **Category:** Code Quality
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:73-88`, `src/handlers/registry.ts:19-29`
-- **Description:** `runner.ts` contains a local `shapeMap` object used exclusively for emitting `stage_started` events:
+- **Severity:** LOW
+- **Category:** Correctness
+- **Status:** OPEN
+- **File(s):** `src/validation/rules.ts:275-289`
+- **Description:** The rule fires when `isLlmNode && !node.prompt && !node.label`. However, the parser always sets `label` to the node's ID when no explicit label is specified (see `defaultGraphNode` in `parser.ts`). This means `node.label` is always a non-empty string for every node produced by the parser, making `!node.label` permanently false. The rule can never trigger for any valid graph, rendering it a silent no-op. The test for this rule (`validator.test.ts`) does not exercise the warning path, only the non-warning path, which confirms the warning was never reachable.
+- **Recommendation:** Change the condition to detect nodes with no explicit `prompt` attribute and whose label equals their ID (the default, auto-assigned value):
   ```typescript
-  const shapeMap: Record<string, string> = {
-    Mdiamond: "start",
-    Msquare: "exit",
-    box: "codergen",
-    hexagon: "wait.human",
-    diamond: "conditional",
-    component: "parallel",
-    tripleoctagon: "parallel.fan_in",
-    parallelogram: "tool",
-    house: "stack.manager_loop",
-  };
+  const hasExplicitLabel = node.raw.has("label");
+  if (isLlmNode && !node.prompt && !hasExplicitLabel) {
   ```
-  This is identical (with one minor cosmetic difference: the comment) to `SHAPE_TO_TYPE` in `registry.ts`. If a new handler type is added, both maps must be updated, increasing the risk of inconsistency.
-- **Recommendation:** Import and reuse `SHAPE_TO_TYPE` from `registry.ts` in `handlerTypeFor`:
-  ```typescript
-  import { SHAPE_TO_TYPE } from "../handlers/registry.js";
-  // ...
-  return SHAPE_TO_TYPE[node.shape] ?? "default";
-  ```
-- **Resolution:** Added `SHAPE_TO_TYPE` to the import from `registry.ts` in `runner.ts` and replaced the local `shapeMap` with a direct reference to `SHAPE_TO_TYPE`.
+  This requires `raw` (the set of explicitly-parsed attributes) to be available on `GraphNode`. If `raw` is not exposed, an alternative is to compare `node.label === node.id` as a proxy for "no explicit label was set". Add a test that verifies the warning fires for a box node with no `prompt` and no explicit `label`.
 
 ---
 
-### FINDING-006: Step label comment "e. CHECKPOINT" appears after steps f and g in `runner.ts`
+### FINDING-005: `resolveThreadId`'s `previousNodeId` parameter is never supplied by any caller
+
+- **Severity:** LOW
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/model/fidelity.ts:22-32`, `src/handlers/codergen.ts:139`
+- **Description:** The spec (Section 11.3) defines thread ID resolution precedence as: node > edge > class-derived > **previous node ID**. The implementation correctly defines the four-argument `resolveThreadId(node, graph, incomingEdge?, previousNodeId?)` signature, but the only call site at `codergen.ts:139` passes only three arguments:
+  ```typescript
+  const threadId = resolveThreadId(node, graph, config.incomingEdge);
+  ```
+  `previousNodeId` is therefore always `undefined`, causing the fallback at line 31 to always return `node.id` instead of the previous node's ID. The spec-described "use previous node as thread" feature is never exercised. This means two sequential LLM nodes in the same pipeline always get different thread IDs (their own IDs) rather than sharing the previous node's thread when not otherwise configured.
+- **Recommendation:** Pass the previous node's ID into `CodergenHandler.execute`. The runner tracks `currentNode` at advance-time; the simplest fix is to add a `previousNodeId?: string` field to `NodeConfig` (or `RunConfig`) and populate it just before advancing:
+  ```typescript
+  // In runner.ts, before updating currentNode:
+  nodeConfig.previousNodeId = currentNode.id;
+  currentNode = graph.nodes.get(edge.to)!;
+  ```
+  Then update `codergen.ts` to forward it: `resolveThreadId(node, graph, config.incomingEdge, config.previousNodeId)`.
+
+---
+
+### FINDING-006: `timeout: 0` immediately aborts a CC session with no guard
+
+- **Severity:** TRIVIAL
+- **Category:** Correctness
+- **Status:** OPEN
+- **File(s):** `src/backend/cc-backend.ts:34-36`
+- **Description:** If `options.timeout` is `0`, `setTimeout(() => abortController.abort(), 0)` fires on the next tick, aborting the CC session before it has a chance to produce any output. There is no guard against zero. A `timeout: 0` attribute on a node (which the DOT parser would produce as `0` milliseconds if the user writes `timeout = "0"`) would cause every execution of that node to immediately fail with a timeout error. This is most likely a misconfiguration rather than intentional behavior.
+- **Recommendation:** Add a guard to skip the timeout setup for zero values:
+  ```typescript
+  if (options.timeout !== undefined && options.timeout > 0) {
+  ```
+  Alternatively, document that `timeout: 0` means "abort immediately" in the attribute reference. The parser's `parseDurationToMs` function does not produce `0` for any valid duration string (bare `"0"` would parse to `0`), so this is only triggered by an explicit zero timeout in the DOT source.
+
+---
+
+### FINDING-007: `edge_selected` event is emitted after the checkpoint save, inverting observable order
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:375-376`
-- **Description:** The spec defines the traversal loop steps in order: b (execute), c (record), d (apply context), e (checkpoint), f (select edge), g (loop restart), h (advance). The implementation intentionally reorders these — checkpoint is saved **after** edge selection (f) and loop restart check (g) so the checkpoint can record `edge.to` (the next node) directly. This is a valid design decision noted in the comment `"(save with nextNode = edge.to)"`.
-
-  However, the comment still uses the spec's letter "e" for the checkpoint step, which now appears between the code for steps g and h. This makes the code harder to audit for spec compliance — it looks like step e is out of order rather than being an intentional implementation choice.
-- **Recommendation:** Rename the comment to make the intentional deviation explicit:
-  ```typescript
-  // CHECKPOINT — intentionally placed after edge selection (spec step e)
-  // so we can record currentNode = edge.to (the node to resume from).
-  ```
-  This removes the misleading spec step letter and makes the reasoning transparent.
-- **Resolution:** Updated the comment from `// e. CHECKPOINT (save with nextNode = edge.to)` to the two-line form described in the recommendation.
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:374-402`
+- **Description:** The sequence is: (1) save checkpoint (lines 376-387), (2) emit `checkpoint_saved` (lines 389-393), (3) emit `edge_selected` (lines 395-402). A consumer of the event stream therefore observes `checkpoint_saved` before `edge_selected`, even though the edge selection logically precedes the checkpoint. The checkpoint correctly stores `edge.to` as the next node, so the data is correct; only the event ordering is counter-intuitive. An `onEvent` consumer correlating `edge_selected` events with checkpoint saves would see them in reversed order.
+- **Recommendation:** Swap the order: emit `edge_selected` first, then save the checkpoint and emit `checkpoint_saved`. The checkpoint content (`edge.to`) is already known at the point of edge selection and does not depend on the event emission.
 
 ---
 
 ## Statistics
 
-- Total findings: 6
+- Total findings: 7
 - Critical: 0
 - High: 0
 - Medium: 1
-- Low: 3
+- Low: 4
 - Trivial: 2
