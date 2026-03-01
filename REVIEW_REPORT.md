@@ -1,89 +1,132 @@
 # Code Review Report
 
 **Date:** 2026-03-01
-**Reviewer:** sixteenth-pass
+**Reviewer:** seventeenth-pass
 **Test Status:** All passing (349/349 across 22 test files)
 
 ---
 
 ## Summary
 
-This is the sixteenth code review pass of the Attractor TypeScript DAG pipeline execution engine. All 339 tests pass and the codebase remains in excellent shape after 15 prior review cycles. This pass surfaces 2 findings: both LOW severity. FINDING-001 is a persistent inconsistency in the CLI where `cmdRun` validates the graph without first applying transforms, while `cmdValidate` correctly applies transforms first. FINDING-002 is a test coverage gap: the CLI command functions (`cmdRun`, `cmdValidate`, `cmdVisualize`) have no tests at all, which is why FINDING-001 was never caught automatically. No critical, high, or medium issues were found.
+This is the seventeenth code review pass of the Attractor TypeScript DAG pipeline execution engine. All 349 tests pass and the codebase is in excellent shape after 16 prior review cycles. This pass surfaces 3 findings: all LOW severity. FINDING-001 is a public API gap — the `Diagnostic` type (return type of the exported `validate()` function) is not itself exported from `src/index.ts`. FINDING-002 is the only remaining test coverage gap — `cmdVisualize` is exported but has no tests. FINDING-003 is a silent failure mode in checkpoint resume — if the checkpoint references a node that no longer exists in the (possibly modified) graph, the engine silently falls back to the start node instead of emitting a warning or throwing. No critical, high, or medium issues were found.
 
 ---
 
 ## Findings
 
-### FINDING-001: `cmdRun` validates without applying transforms first — inconsistent with `cmdValidate`
+### FINDING-001: `Diagnostic` type (return type of `validate()`) not exported from `src/index.ts`
 
 - **Severity:** LOW
-- **Category:** Code Quality / Spec Compliance
-- **Status:** RESOLVED — added `applyTransforms(graph)` before `validate(graph)` in `cmdRun` (line 100)
-- **File(s):** `src/cli.ts:99-100`
-- **Description:** The `cmdRun` function calls `validate(graph)` immediately after `parse(source)` without first calling `applyTransforms(graph)`:
+- **Category:** Integration / Code Quality
+- **Status:** OPEN
+- **File(s):** `src/index.ts`
+- **Description:** The public API exports `validate()` and `validateOrThrow()`, both of which return `Diagnostic[]`. However, `Diagnostic` itself (and the related `Severity` type and `LintRule` function type) are not exported from `src/index.ts`:
 
   ```ts
-  // src/cli.ts (cmdRun)
-  const graph = parse(source as string);
-  const diags = validate(graph);   // ← no applyTransforms before this!
+  // src/index.ts — currently missing:
+  // export type { Diagnostic, Severity } from "./validation/diagnostic.js";
+  // export type { LintRule } from "./validation/rules.js";
   ```
 
-  In contrast, `cmdValidate` correctly calls `applyTransforms` first:
+  An external consumer who imports `validate` from the package and wants to type the return value or filter by severity is forced to import `Diagnostic` from a sub-path (`./validation/diagnostic.js`), bypassing the public API. This is a usability issue for library consumers and inconsistent with the fact that the functions using these types are exported.
+
+  The same omission applies to:
+  - `Severity` (used in `Diagnostic.severity`)
+  - `LintRule` (the type for `extraRules` parameter in `validate()` and `validateOrThrow()`)
+
+- **Recommendation:** Add the following exports to `src/index.ts`:
 
   ```ts
-  // src/cli.ts (cmdValidate)
-  const graph = parse(source as string);
-  applyTransforms(graph);          // ← correct
-  const diags = validate(graph);
+  export type { Diagnostic, Severity } from "./validation/diagnostic.js";
+  export type { LintRule } from "./validation/rules.js";
   ```
 
-  The spec (Section 8.2) requires that transforms be applied before validation: "Apply transforms: variable expansion, stylesheet application. Run `validateOrThrow(graph)`. Abort on errors." The `run()` function itself applies transforms internally (`applyTransforms(graph)` at runner.ts:117) before calling `validateOrThrow`, so pipeline *execution* is not affected — the graph is transformed correctly during the `run()` call. The problem is the early-exit validation feedback printed to the user in `cmdRun`. If the user runs `attractor run pipeline.dot`, they get validation output from an untransformed graph while `attractor validate pipeline.dot` produces output from a transformed graph.
-
-  In practice no current validation rule produces a different result on the transformed graph vs the raw graph (transforms expand `$goal` in `node.prompt` and apply stylesheet `llmModel`/`llmProvider`/`reasoningEffort` overrides to nodes — none of the 15 validation rules inspect those fields after transformation). However, the inconsistency violates the principle of least surprise: users expect `attractor run` and `attractor validate` to apply the same rules. Any future validation rule that depends on transformed data (e.g. a rule that checks expanded prompt content, or a rule that validates that a stylesheet-applied model name is non-empty) would silently produce incorrect results from `cmdRun`.
-
-  The memory notes that FINDING-001 in review cycle 13 was described as "added `applyTransforms` before validate in `cmdRun`" — but examining the current source shows this fix was either never applied or was subsequently reverted.
-
-- **Recommendation:** Add `applyTransforms(graph)` between `parse()` and `validate()` in `cmdRun`, matching `cmdValidate`:
-
-  ```ts
-  const graph = parse(source as string);
-  applyTransforms(graph);          // add this line
-  const diags = validate(graph);
-  ```
-
-  Note: the `run()` call on line 152 passes the same `graph` object, and `run()` internally calls `applyTransforms(graph)` again (which is idempotent — applying transforms twice is safe because stylesheet application only sets properties when not already set via raw node attributes, and `$goal` expansion is a string replace). Alternatively, the early `validate()` call in `cmdRun` could be removed entirely and replaced with a call to `validateOrThrow()` inside the `try/catch` around `run()`, relying on `run()`'s internal validation for the error check. Either approach would fix the inconsistency.
+  Optionally also export `Checkpoint` from `./model/checkpoint.js` for external tools that want to inspect or manipulate checkpoint files programmatically.
 
 ---
 
-### FINDING-002: CLI command functions have no test coverage
+### FINDING-002: `cmdVisualize` has no test coverage
 
 - **Severity:** LOW
 - **Category:** Test Quality
-- **Status:** RESOLVED — exported `cmdRun`, `cmdValidate`, `cmdVisualize` from `src/cli.ts`; added 10 tests for `cmdRun` and `cmdValidate` covering: valid pipeline exits 0, invalid pipeline exits 2 with error diagnostics, missing dotfile exits 3, missing file exits 3, transforms applied before validation (FINDING-001 regression), and `$goal` expansion pipeline exits 0.
-- **File(s):** `test/cli/cli.test.ts`, `src/cli.ts`
-- **Description:** The file `test/cli/cli.test.ts` tests only the `formatEvent` pure function. The three CLI command functions — `cmdRun`, `cmdValidate`, and `cmdVisualize` — have zero test coverage:
+- **Status:** OPEN
+- **File(s):** `src/cli.ts`, `test/cli/cli.test.ts`
+- **Description:** Review cycle 16 added tests for `cmdRun` and `cmdValidate` after exporting all three CLI command functions. However, `cmdVisualize` was exported but received no tests. It is the only exported CLI command without coverage:
 
   ```ts
-  // test/cli/cli.test.ts — only this export is tested:
-  import { formatEvent } from "../../src/cli.js";
+  // test/cli/cli.test.ts — these are tested:
+  describe("cmdValidate", () => { ... });
+  describe("cmdRun", () => { ... });
+
+  // missing:
+  // describe("cmdVisualize", () => { ... });
   ```
 
-  No test imports or exercises `cmdRun`, `cmdValidate`, or `cmdVisualize`. The integration tests in `test/integration/end-to-end.test.ts` test `run()` and `validate()` directly, bypassing the CLI layer entirely.
+  At minimum, the two error paths that don't require Graphviz to be installed should be tested:
+  1. Missing dotfile argument → exits with code 3 and prints usage to stderr.
+  2. Dotfile cannot be read → exits with code 3 and prints error to stderr.
 
-  As a result:
-  - FINDING-001 (the missing `applyTransforms` in `cmdRun`) was not caught by tests and persisted across multiple review cycles.
-  - CLI argument parsing, exit code behavior, diagnostic formatting, and error handling in these three functions cannot regress visibly.
-  - Incorrect CLI option handling (e.g. `--permission-mode` parsing, `--resume` path handling) would be invisible until a manual smoke test.
+  The Graphviz-dependent success path (`dot` process spawning) can be conditionally skipped using `vi.skipIf` or skipped when the `dot` binary is not found, to keep CI portable.
 
-  The CLI functions call `process.exit()` and write to `process.stderr`/`process.stdout`, which makes unit testing them require mocking. However, lightweight integration tests are straightforward to write by invoking the functions via a helper that captures output and stubs `process.exit`.
+- **Recommendation:** Add a `describe("cmdVisualize", ...)` block in `test/cli/cli.test.ts` covering at least the argument-missing and file-not-found error paths, following the same pattern established for `cmdRun` and `cmdValidate`.
 
-- **Recommendation:** Add targeted tests for at least `cmdRun` and `cmdValidate` covering:
-  1. `cmdValidate` on a valid pipeline produces zero error diagnostics and exits with code 0.
-  2. `cmdValidate` on an invalid pipeline (missing start node) exits with code 2 and prints error diagnostics.
-  3. `cmdRun` on a valid pipeline applies transforms before validating (regression test for FINDING-001: a pipeline where the `promptOnLlmNodesRule` or a future rule depends on the transformed graph should produce correct diagnostics).
-  4. `cmdRun` with a missing dotfile exits with code 3 and prints usage.
+---
 
-  These tests can mock `process.exit` via `vi.spyOn(process, 'exit').mockImplementation(() => { throw new ExitError(code); })` and capture stderr by overriding `process.stderr.write`.
+### FINDING-003: Silent fallback to start node when checkpoint's `currentNode` is not found in graph
+
+- **Severity:** LOW
+- **Category:** Correctness / Robustness
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:163-167`
+- **Description:** When resuming from a checkpoint, the runner looks up the node to resume from in the current graph:
+
+  ```ts
+  // src/engine/runner.ts
+  const resumeNode = graph.nodes.get(checkpoint.currentNode);
+  if (resumeNode) {
+    currentNode = resumeNode;
+  }
+  // No else branch: silently falls back to startNode
+  ```
+
+  If the checkpoint file references a node ID that no longer exists in the graph (e.g., the `.dot` file was modified and the node was renamed or removed after the checkpoint was saved), `resumeNode` is `undefined` and `currentNode` stays as `startNode` (initialized on line 131). The pipeline then silently restarts from the beginning.
+
+  This silent fallback is dangerous because:
+  1. The user believes they are resuming from a checkpoint, but are actually restarting from the beginning.
+  2. Nodes already completed (per the restored `completedNodes`) will be re-executed, potentially writing duplicate artifacts, making duplicate API calls, or conflicting with prior results.
+  3. The user gets no indication that the resume did not work as intended.
+
+  A warning event should at minimum be emitted. A configurable strict mode could throw instead.
+
+- **Recommendation:** Add a warning event (or throw an error) when the checkpoint node is not found:
+
+  ```ts
+  const resumeNode = graph.nodes.get(checkpoint.currentNode);
+  if (resumeNode) {
+    currentNode = resumeNode;
+  } else {
+    // Emit a warning so the user knows the resume didn't find the checkpoint node
+    emit(config, {
+      kind: "warning",
+      message: `Checkpoint node '${checkpoint.currentNode}' not found in graph — resuming from start`,
+      timestamp: Date.now(),
+    });
+    // currentNode remains startNode (already initialized above)
+  }
+  ```
+
+  Alternatively, throw an error to make the failure explicit:
+
+  ```ts
+  if (!resumeNode) {
+    throw new Error(
+      `Checkpoint references node '${checkpoint.currentNode}' which does not exist in the current graph. ` +
+      `The graph may have been modified after the checkpoint was saved.`
+    );
+  }
+  ```
+
+  Throwing is safer; a warning-based approach is more lenient. Either is better than the current silent fallback.
 
 ---
 
@@ -94,13 +137,14 @@ This is the sixteenth code review pass of the Attractor TypeScript DAG pipeline 
 | CRITICAL | 0     |
 | HIGH     | 0     |
 | MEDIUM   | 0     |
-| LOW      | 2     |
+| LOW      | 3     |
 | TRIVIAL  | 0     |
-| **Total**| **2** |
+| **Total**| **3** |
 
 | Category       | Count |
 |----------------|-------|
-| Code Quality   | 1     |
+| Integration    | 1     |
 | Test Quality   | 1     |
+| Correctness    | 1     |
 
-Both findings are LOW severity. FINDING-001 is a concrete code inconsistency with a one-line fix. FINDING-002 is a structural test gap that allowed FINDING-001 to persist. Neither affects the correctness of pipeline execution — the `run()` engine path is fully correct and covered by 339 passing tests.
+All three findings are LOW severity. FINDING-001 and FINDING-002 are API surface/test coverage gaps with straightforward fixes. FINDING-003 is the most substantive: a silent failure mode during checkpoint resume that could cause user confusion or duplicate work, fixable with a one-line warning emission or a thrown error.
