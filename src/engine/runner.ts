@@ -113,11 +113,14 @@ export async function run(config: RunConfig): Promise<RunResult> {
   if (config.resumeFromCheckpoint) {
     const checkpoint = await loadCheckpoint(config.resumeFromCheckpoint);
     completedNodes = checkpoint.completedNodes;
+    // Restore nodeOutcomes
+    for (const [k, v] of Object.entries(checkpoint.nodeOutcomes)) {
+      nodeOutcomes.set(k, v as Outcome);
+    }
     // Restore context
     for (const [k, v] of Object.entries(checkpoint.contextValues)) {
       context.set(k, v);
     }
-    // Restore nodeOutcomes from context as best we can (we don't have them in checkpoint)
     // Resume from saved currentNode
     const resumeNode = graph.nodes.get(checkpoint.currentNode);
     if (resumeNode) {
@@ -278,6 +281,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
         timestamp: Date.now(),
         currentNode: edge.to,
         completedNodes: [...completedNodes],
+        nodeOutcomes: Object.fromEntries(nodeOutcomes),
         nodeRetries: {},
         contextValues: context.snapshot(),
         sessionMap: {},
@@ -311,6 +315,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       timestamp: Date.now(),
       currentNode: currentNode.id,
       completedNodes: [...completedNodes],
+      nodeOutcomes: Object.fromEntries(nodeOutcomes),
       nodeRetries: {},
       contextValues: context.snapshot(),
       sessionMap: {},

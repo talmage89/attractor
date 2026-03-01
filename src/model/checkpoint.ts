@@ -1,10 +1,12 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import type { Outcome } from "./outcome.js";
 
 export interface Checkpoint {
   timestamp: number;
   currentNode: string;
   completedNodes: string[];
+  nodeOutcomes: Record<string, Outcome>;
   nodeRetries: Record<string, number>;
   contextValues: Record<string, unknown>;
   sessionMap: Record<string, string>;
@@ -43,6 +45,7 @@ export async function loadCheckpoint(filePath: string): Promise<Checkpoint> {
     "timestamp",
     "currentNode",
     "completedNodes",
+    "nodeOutcomes",
     "nodeRetries",
     "contextValues",
     "sessionMap",

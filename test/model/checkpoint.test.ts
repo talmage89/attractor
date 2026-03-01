@@ -20,6 +20,7 @@ describe("Checkpoint", () => {
     timestamp: 1709000000000,
     currentNode: "implement",
     completedNodes: ["start", "plan", "implement"],
+    nodeOutcomes: { plan: { status: "success" }, implement: { status: "partial_success" } },
     nodeRetries: { implement: 1 },
     contextValues: { "graph.goal": "Test", outcome: "success" },
     sessionMap: { "main-loop": "session-uuid-123" },
@@ -72,6 +73,7 @@ describe("Checkpoint", () => {
       timestamp: Date.now(),
       currentNode: "step2",
       completedNodes: ["step1"],
+      nodeOutcomes: { step1: { status: "success" as const } },
       nodeRetries: {},
       contextValues: { "graph.goal": "Test resume", outcome: "success" },
       sessionMap: {},
@@ -91,5 +93,44 @@ describe("Checkpoint", () => {
     }
     expect(ctx.getString("outcome")).toBe("success");
     expect(ctx.getString("graph.goal")).toBe("Test resume");
+  });
+
+  it("persists nodeOutcomes and reloads them correctly", async () => {
+    const checkpoint = {
+      timestamp: Date.now(),
+      currentNode: "review",
+      completedNodes: ["plan", "implement"],
+      nodeOutcomes: {
+        plan: { status: "success" as const },
+        implement: { status: "partial_success" as const, notes: "some caveats" },
+      },
+      nodeRetries: {},
+      contextValues: {},
+      sessionMap: {},
+    };
+    await saveCheckpoint(checkpoint, tmpDir);
+    const loaded = await loadCheckpoint(path.join(tmpDir, "checkpoint.json"));
+    expect(loaded.nodeOutcomes["plan"]).toEqual({ status: "success" });
+    expect(loaded.nodeOutcomes["implement"]).toEqual({ status: "partial_success", notes: "some caveats" });
+  });
+
+  it("throws when nodeOutcomes field is missing", async () => {
+    const incomplete = {
+      timestamp: Date.now(),
+      currentNode: "step1",
+      completedNodes: [],
+      // nodeOutcomes intentionally omitted
+      nodeRetries: {},
+      contextValues: {},
+      sessionMap: {},
+    };
+    await fs.writeFile(
+      path.join(tmpDir, "checkpoint.json"),
+      JSON.stringify(incomplete),
+      "utf-8"
+    );
+    await expect(
+      loadCheckpoint(path.join(tmpDir, "checkpoint.json"))
+    ).rejects.toThrow("nodeOutcomes");
   });
 });

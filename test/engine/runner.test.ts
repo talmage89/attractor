@@ -279,6 +279,7 @@ describe("execution engine", () => {
       timestamp: Date.now(),
       currentNode: "c",
       completedNodes: ["a", "b"],
+      nodeOutcomes: { a: { status: "success" }, b: { status: "success" } },
       nodeRetries: {},
       contextValues: { "graph.goal": "Test resume", outcome: "success" },
       sessionMap: {},

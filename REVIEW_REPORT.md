@@ -27,10 +27,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** HIGH
 - **Category:** Correctness / Integration
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:113-126`, `src/model/checkpoint.ts`
 - **Description:** The `Checkpoint` interface stores `completedNodes` and `contextValues`, but not `nodeOutcomes`. When `run()` resumes from a checkpoint (line 113), `nodeOutcomes` is restored as an empty `Map`. The comment at line 120 acknowledges this: "Restore nodeOutcomes from context as best we can (we don't have them in checkpoint)." When the pipeline reaches an exit node after resume, `checkGoalGates(graph, nodeOutcomes)` iterates the empty map and returns `{ satisfied: true }` — silently passing all goal gates even if a goal-gate node had previously failed. A pipeline that uses goal gates and is resumed from a crash will incorrectly skip goal gate enforcement.
-- **Recommendation:** Add a `nodeOutcomes` field to `Checkpoint` (serialized as `Record<string, Outcome>`). Restore it in the resume path: `for (const [k, v] of Object.entries(checkpoint.nodeOutcomes)) nodeOutcomes.set(k, v as Outcome)`.
+- **Fix:** Added `nodeOutcomes: Record<string, Outcome>` to `Checkpoint` interface. Updated both `saveCheckpoint` calls in runner.ts to serialize `nodeOutcomes` via `Object.fromEntries`. Restored `nodeOutcomes` from checkpoint in the resume path. Updated required-fields validation to include `nodeOutcomes`. Added 2 tests (`persists nodeOutcomes and reloads them correctly`, `throws when nodeOutcomes field is missing`). All 222 tests pass.
 
 ---
 
