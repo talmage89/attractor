@@ -124,7 +124,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:161-165`, `docs/SPEC.md` Section 10.3
 - **Description:** SPEC Section 10.3 step 5 says: *"Determine the next node: find the outgoing edge from `checkpoint.currentNode` using the last recorded outcome, then set `currentNode` to the edge's target."* The implementation stores `currentNode: edge.to` in the checkpoint (the pre-resolved next node), so resume reads `graph.nodes.get(checkpoint.currentNode)` directly without re-running edge selection. The code is correct, but the spec describes a different checkpoint design where `currentNode` is the most-recently-completed node. Any reader of the spec attempting to understand resume behaviour will be misled.
 

@@ -1456,7 +1456,7 @@ async function loadCheckpoint(
 2. Restore context from `checkpoint.contextValues`.
 3. Restore `completedNodes` and `nodeRetries`.
 4. Restore session manager from `checkpoint.sessionMap`.
-5. Determine the next node: find the outgoing edge from `checkpoint.currentNode` using the last recorded outcome, then set `currentNode` to the edge's target.
+5. Restore `currentNode` from `checkpoint.currentNode` (this field contains the next node to execute, already resolved from edge selection before the checkpoint was saved).
 6. For the first node after resume, if it was using `full` fidelity, degrade to `summary:high` because in-memory CC sessions cannot be serialized (only the `sessionId` is saved; CC SDK handles actual session persistence on disk).
 
 ---
