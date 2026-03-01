@@ -61,7 +61,7 @@ The codebase is in excellent shape after five prior review cycles with all previ
 
 - **Severity:** LOW
 - **Category:** Correctness / Usability
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/tool.ts:82-98`
 - **Description:** The `ToolHandler` captures stderr from the shell command but only exposes stdout as `tool.output` and exit code as `tool.exit_code` in context updates:
   ```typescript

@@ -83,6 +83,7 @@ export class ToolHandler implements Handler {
     const contextUpdates: Record<string, string> = {
       "tool.output": output,
       "tool.exit_code": String(result.exitCode),
+      "tool.stderr": result.stderr.slice(0, MAX_OUTPUT_LENGTH),
     };
 
     if (result.exitCode === 0 && !result.timedOut) {
