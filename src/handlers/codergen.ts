@@ -132,11 +132,11 @@ export class CodergenHandler implements Handler {
     // degrade to "summary:high". In-memory CC sessions cannot be serialized
     // (only the sessionId is saved); resuming with full fidelity but no active
     // session would send no context at all (spec Section 10.3, step 6).
-    let fidelity = resolveFidelity(node, graph);
+    let fidelity = resolveFidelity(node, graph, config.incomingEdge);
     if (config.firstNodeAfterResume && fidelity === "full") {
       fidelity = "summary:high";
     }
-    const threadId = resolveThreadId(node, graph);
+    const threadId = resolveThreadId(node, graph, config.incomingEdge);
 
     let finalPrompt = prompt;
     let resumeSessionId: string | undefined;

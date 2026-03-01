@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { Graph, GraphNode } from "../model/graph.js";
+import type { Graph, GraphNode, Edge } from "../model/graph.js";
 import { findStartNode, isTerminal } from "../model/graph.js";
 import type { Outcome } from "../model/outcome.js";
 import { Context } from "../model/context.js";
@@ -36,6 +36,13 @@ export interface RunConfig {
    * (spec Section 10.3, step 6).
    */
   firstNodeAfterResume?: boolean;
+  /**
+   * The edge that was traversed to reach the current node. Set by the runner
+   * before each handler invocation so that handlers can honour edge-level
+   * `fidelity` and `thread_id` overrides (which take priority over node-level
+   * and graph-level defaults in the resolution chain).
+   */
+  incomingEdge?: Edge;
 }
 
 export interface RunResult {
@@ -120,6 +127,10 @@ export async function run(config: RunConfig): Promise<RunResult> {
   // Passed to handlers so CodergenHandler can degrade full→summary:high fidelity.
   let isFirstNodeAfterResume = false;
 
+  // Track the edge that was traversed to reach the current node so handlers
+  // can honour edge-level fidelity/threadId overrides.
+  let currentIncomingEdge: Edge | undefined = undefined;
+
   if (config.resumeFromCheckpoint) {
     const checkpoint = await loadCheckpoint(config.resumeFromCheckpoint);
     completedNodes = checkpoint.completedNodes;
@@ -153,11 +164,14 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
   // 3. TRAVERSAL LOOP
   loop: while (true) {
-    // Build a per-iteration config that includes the firstNodeAfterResume flag
-    // for the first node executed after a checkpoint restore.
-    const nodeConfig: RunConfig = isFirstNodeAfterResume
-      ? { ...config, firstNodeAfterResume: true }
-      : config;
+    // Build a per-iteration config that includes the incoming edge (so handlers
+    // can honour edge-level fidelity/threadId overrides) and the
+    // firstNodeAfterResume flag for the first node executed after a restore.
+    const nodeConfig: RunConfig = {
+      ...config,
+      incomingEdge: currentIncomingEdge,
+      ...(isFirstNodeAfterResume ? { firstNodeAfterResume: true } : {}),
+    };
     isFirstNodeAfterResume = false;
 
     // a. CHECK TERMINAL
@@ -223,6 +237,9 @@ export async function run(config: RunConfig): Promise<RunResult> {
         if (retryTarget) {
           const retryNode = graph.nodes.get(retryTarget)!;
           currentNode = retryNode;
+          // Goal-gate retries jump to a node directly (not via an edge), so
+          // there is no incoming edge to honour for the next iteration.
+          currentIncomingEdge = undefined;
           continue loop;
         } else {
           finalStatus = "fail";
@@ -338,6 +355,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
     });
 
     // h. ADVANCE
+    currentIncomingEdge = edge;
     currentNode = graph.nodes.get(edge.to)!;
   }
 

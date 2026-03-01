@@ -16,7 +16,7 @@ The codebase is in excellent shape after four prior review cycles with all previ
 
 - **Severity:** MEDIUM
 - **Category:** Spec Compliance / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:135,139`, `src/model/fidelity.ts:11-32`, `src/engine/runner.ts:21-38`
 - **Description:** The `Edge` interface has `fidelity: string` and `threadId: string` fields, and the `resolveFidelity`/`resolveThreadId` functions accept an optional `incomingEdge?: Edge` parameter specifically to honour these overrides (edge-level fidelity/threadId has higher priority than node-level in the resolution chain). However, no code path ever passes the incoming edge to these functions:
   - `CodergenHandler.execute()` calls `resolveFidelity(node, graph)` (line 135) and `resolveThreadId(node, graph)` (line 139), omitting the third argument entirely.
