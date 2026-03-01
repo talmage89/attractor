@@ -837,4 +837,37 @@ describe("execution engine", () => {
     // work was executed on the initial pass plus up to maxGoalGateRetries (2) retries = 3 total
     expect(callCount).toBe(3);
   });
+
+  it("checkpoint_saved event nodeId matches the resume node (edge.to), not the completed node", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test checkpoint nodeId"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        b [shape=box]
+        s -> a -> b -> e
+      }
+    `);
+
+    const events: PipelineEvent[] = [];
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      onEvent: (e) => events.push(e),
+    });
+
+    const checkpointEvents = events.filter(e => e.kind === "checkpoint_saved") as Array<{ kind: "checkpoint_saved"; nodeId: string; timestamp: number }>;
+    // Checkpoints are saved after each node completes — nodeId should be the NEXT node (resume point)
+    // Pipeline: s -> a -> b -> e
+    // After s completes → checkpoint at a; after a completes → checkpoint at b; after b completes → checkpoint at e
+    const nodeIds = checkpointEvents.map(e => e.nodeId);
+    expect(nodeIds).toContain("a");
+    expect(nodeIds).toContain("b");
+    expect(nodeIds).toContain("e");
+    // The completed node ids (s, a, b) should NOT appear as checkpoint nodeIds
+    expect(nodeIds).not.toContain("s");
+  });
 });

@@ -106,7 +106,7 @@ The Attractor codebase is in excellent shape after nine prior review cycles. All
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:410-414`
 - **Description:** After saving a checkpoint, the runner emits:
 

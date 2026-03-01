@@ -410,7 +410,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
     emit(config, {
       kind: "checkpoint_saved",
-      nodeId: currentNode.id,
+      nodeId: edge.to,
       timestamp: Date.now(),
     });
 
