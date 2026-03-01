@@ -168,6 +168,7 @@ const KNOWN_TYPES = new Set([
   "parallel",
   "parallel.fan_in",
   "tool",
+  "stack.manager_loop",
 ]);
 
 function typeKnownRule(graph: Graph): Diagnostic[] {

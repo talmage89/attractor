@@ -278,7 +278,7 @@ describe("validation", () => {
       expect(rule).toHaveLength(0);
     });
 
-    it("warns on stack.manager_loop (future phase, not yet supported)", () => {
+    it("does not warn on stack.manager_loop (registered as stub handler)", () => {
       const graph = parse(`
         digraph G {
           s [shape=Mdiamond]
@@ -288,8 +288,8 @@ describe("validation", () => {
         }
       `);
       const diags = validate(graph);
-      const rule = diags.filter(d => d.rule === "type_known" && d.severity === "warning");
-      expect(rule.length).toBeGreaterThan(0);
+      const rule = diags.filter(d => d.rule === "type_known" && d.nodeId === "a");
+      expect(rule).toHaveLength(0);
     });
   });
 

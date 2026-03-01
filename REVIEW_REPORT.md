@@ -126,7 +126,7 @@ This is the fourteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** LOW
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/registry.ts:28,37-43`, `src/validation/rules.ts:165-174`
 - **Description:** `HandlerRegistry` registers a stub handler for `'stack.manager_loop'` (the type mapped from `house` shape via `SHAPE_TO_TYPE`), meaning the runtime will handle nodes of this type (returning `fail` with an "unimplemented" message). However, `KNOWN_TYPES` in `rules.ts:165-174` does not include `'stack.manager_loop'`.
 
