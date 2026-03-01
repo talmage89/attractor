@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { Graph, GraphNode, Edge } from "../model/graph.js";
+import type { Graph, GraphNode } from "../model/graph.js";
 import { findStartNode, isTerminal } from "../model/graph.js";
 import type { Outcome } from "../model/outcome.js";
 import { Context } from "../model/context.js";
@@ -96,7 +96,6 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
   let completedNodes: string[] = [];
   let nodeOutcomes = new Map<string, Outcome>();
-  let lastEdge: Edge | undefined;
 
   // If resuming from checkpoint, restore state
   let startNode = findStartNode(graph);
@@ -299,7 +298,6 @@ export async function run(config: RunConfig): Promise<RunResult> {
     });
 
     // h. ADVANCE
-    lastEdge = edge;
     currentNode = graph.nodes.get(edge.to)!;
   }
 

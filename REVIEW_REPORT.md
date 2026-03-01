@@ -105,10 +105,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** LOW
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:105`, `src/engine/runner.ts:301`
 - **Description:** `let lastEdge: Edge | undefined` is declared at line 105 and assigned at line 301 (`lastEdge = edge`), but the variable is never read. It serves no purpose and adds noise.
-- **Recommendation:** Remove the `lastEdge` variable declaration and assignment.
+- **Fix:** Removed `lastEdge` declaration and assignment. Also removed the now-unused `Edge` type from the import on line 3. All 235 tests pass.
 
 ---
 
@@ -184,5 +184,5 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 - Critical: 0
 - High: 2 (all resolved)
 - Medium: 4 (all resolved)
-- Low: 6 (1 resolved, 5 open)
+- Low: 6 (2 resolved, 4 open)
 - Trivial: 3 (all open)
