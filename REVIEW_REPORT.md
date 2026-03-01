@@ -16,7 +16,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
 
 - **Severity:** MEDIUM
 - **Category:** Correctness / Integration
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:107-109`
 - **Description:** Every call to `run()` unconditionally registers three handlers on the caller-supplied registry:
   ```typescript
@@ -34,6 +34,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
   }
   ```
   This requires adding a `hasHandler(type: string): boolean` method to `HandlerRegistry`. Alternatively, document the overwrite behavior explicitly in the JSDoc for `run()` and `RunConfig`, so callers know not to pre-register these three types.
+- **Resolution:** Added `hasHandler(typeString: string): boolean` to `HandlerRegistry`. Changed the three unconditional `registry.register()` calls in `run()` to conditional ones guarded by `!registry.hasHandler(...)`. Added a test verifying that caller-registered start/exit handlers are not overwritten.
 
 ---
 

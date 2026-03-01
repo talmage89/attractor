@@ -103,10 +103,17 @@ export async function run(config: RunConfig): Promise<RunResult> {
   // Use provided registry or create default
   const registry = config.registry ?? new HandlerRegistry(defaultMockHandler);
 
-  // Always register built-in handlers so they never fall through to custom defaults
-  registry.register("start", { async execute(): Promise<Outcome> { return { status: "success" }; } });
-  registry.register("exit", { async execute(): Promise<Outcome> { return { status: "success" }; } });
-  registry.register("wait.human", new WaitForHumanHandler(config.interviewer));
+  // Register built-in handlers only if the caller has not already registered one.
+  // This preserves the caller's custom start/exit/wait.human handlers when provided.
+  if (!registry.hasHandler("start")) {
+    registry.register("start", { async execute(): Promise<Outcome> { return { status: "success" }; } });
+  }
+  if (!registry.hasHandler("exit")) {
+    registry.register("exit", { async execute(): Promise<Outcome> { return { status: "success" }; } });
+  }
+  if (!registry.hasHandler("wait.human")) {
+    registry.register("wait.human", new WaitForHumanHandler(config.interviewer));
+  }
 
   // Apply transforms
   applyTransforms(graph);

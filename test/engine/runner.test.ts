@@ -662,6 +662,48 @@ describe("execution engine", () => {
     expect(result.status).toBe("fail");
   });
 
+  it("does not overwrite caller-registered start/exit handlers", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test custom handlers"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        s -> e
+      }
+    `);
+
+    const callLog: string[] = [];
+    const customStartHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        callLog.push("custom-start");
+        return { status: "success" };
+      },
+    };
+    const customExitHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        callLog.push("custom-exit");
+        return { status: "success" };
+      },
+    };
+
+    const registry = new HandlerRegistry({ async execute(): Promise<Outcome> { return { status: "success" }; } });
+    registry.register("start", customStartHandler);
+    registry.register("exit", customExitHandler);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    expect(result.status).toBe("success");
+    // Both custom handlers should have been called (not overwritten by run())
+    expect(callLog).toContain("custom-start");
+    expect(callLog).toContain("custom-exit");
+  });
+
   it("goal-gate retry loop is bounded by default_max_retry", async () => {
     // Pipeline: start -> work -> exit; work has goal_gate=true and always fails;
     // exit has retry_target pointing back to work. With default_max_retry=2 the

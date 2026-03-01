@@ -49,6 +49,10 @@ export class HandlerRegistry {
     this.handlers.set(typeString, handler);
   }
 
+  hasHandler(typeString: string): boolean {
+    return this.handlers.has(typeString);
+  }
+
   resolve(node: GraphNode): Handler {
     // 1. Explicit type attribute
     if (node.type && this.handlers.has(node.type)) {
