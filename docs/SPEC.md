@@ -1944,7 +1944,7 @@ Events are fire-and-forget. The `onEvent` callback must not throw. If it does, t
 - [ ] Engine resolves start node and begins there
 - [ ] Handler resolved via shape-to-handler-type mapping
 - [ ] Handler called with (node, context, graph, config) and returns Outcome
-- [ ] Outcome written to `{logsRoot}/{nodeId}/status.json`
+- [ ] Codergen handler writes LLM outcome to `{logsRoot}/{nodeId}/status.json`; the engine does not write per-node filesystem artifacts for other handler types
 - [ ] Edge selection follows 5-step priority
 - [ ] Loop: execute → select edge → advance → repeat
 - [ ] Terminal node stops execution
@@ -1982,7 +1982,7 @@ Events are fire-and-forget. The `onEvent` callback must not throw. If it does, t
 - [ ] Handlers return `contextUpdates` merged after each node
 - [ ] Checkpoint saved after each node (JSON file)
 - [ ] Resume from checkpoint restores state and continues
-- [ ] Stage artifacts: prompt.md, response.md, status.json per node
+- [ ] Stage artifacts: prompt.md, response.md, status.json per codergen node (other handler types produce no filesystem artifacts)
 
 ### 17.8 Fidelity and Sessions
 

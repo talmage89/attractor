@@ -189,11 +189,12 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts`, `docs/SPEC.md` Section 17.3
 - **Description:** SPEC DoD Section 17.3 states: *"Outcome written to `{logsRoot}/{nodeId}/status.json`"*. The runner never writes per-node outcome files for non-codergen nodes (tool, conditional, wait-human, parallel, fan-in). Only `CodergenHandler` writes a `status.json`. The DoD is ambiguous about whether this applies to all node types or only codergen nodes.
 
 - **Recommendation:** Clarify the spec: if all node types should emit outcome artifacts, add a `fs.writeFile` call in the runner after `executeWithRetry`. If only codergen nodes, update the DoD wording to reflect that.
+- **Resolution:** Updated SPEC.md Section 17.3 to clarify the `status.json` item as a codergen-handler responsibility ("Codergen handler writes LLM outcome to `{logsRoot}/{nodeId}/status.json`; the engine does not write per-node filesystem artifacts for other handler types"). Also updated Section 17.7 from "per node" to "per codergen node (other handler types produce no filesystem artifacts)". No code change required — the implementation was already correct.
 
 ---
 
