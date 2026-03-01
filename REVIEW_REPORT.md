@@ -49,10 +49,11 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** MEDIUM
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/cli.ts:87`, `src/engine/runner.ts:98`
 - **Description:** The CLI calls `applyTransforms(graph)` explicitly at line 87 (so it can validate the transformed graph), then calls `run(config)`, which calls `applyTransforms(graph)` again at line 98. Both calls operate on the same Graph object by reference. While currently idempotent (`$goal` expansion is a no-op after the first pass; stylesheet checks `node.raw` before overwriting), this is fragile and confusing. If transforms ever become non-idempotent, double application will produce incorrect results.
 - **Recommendation:** Either (a) have `run()` not call `applyTransforms` and document that callers are responsible, or (b) have the CLI pass a pre-transformed flag. The simplest fix is to remove the `applyTransforms` call from the CLI and note that `run()` always applies transforms internally — callers who need validation of the transformed graph should call `applyTransforms` before `validate`.
+- **Fix:** Removed `applyTransforms(graph)` from `cmdRun` in cli.ts. Added a comment explaining that `run()` always applies transforms internally. `cmdValidate` retains its `applyTransforms` call since it never calls `run()`. All 222 tests pass.
 
 ---
 
