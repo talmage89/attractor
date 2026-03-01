@@ -1,191 +1,245 @@
 # Code Review Report
 
 **Date:** 2026-03-01
-**Reviewer:** tenth-pass
-**Test Status:** All passing (266/266)
+**Reviewer:** eleventh-pass
+**Test Status:** All passing (268/268)
 
 ## Summary
 
-The Attractor codebase is in excellent shape after nine prior review cycles. All major correctness and spec-compliance issues have been resolved, and the test suite is green. This tenth-pass review identifies four non-trivial findings: one MEDIUM (accumulated cost lost across loop restarts), one LOW (ConsoleInterviewer deviates from spec format), one LOW (redundant `$goal` expansion in CodergenHandler), and one LOW (`checkpoint_saved` event carries a misleading `nodeId`). Two trivial findings round out the report.
+The Attractor codebase is in very good shape after ten prior review cycles. All tests pass and the core execution engine is solid. This review identifies one HIGH correctness bug (`isTerminal` missing id-based exit node detection), three MEDIUM findings (spec ambiguity on FAIL retry, missing retry unit tests, path traversal in CodergenHandler), and a collection of LOW/TRIVIAL findings covering test gaps, minor spec deviations, and code quality.
 
 ---
 
 ## Findings
 
-### FINDING-001: `loopRestart` discards accumulated `totalCostUsd` from the first run
+### FINDING-001: `isTerminal` does not recognise id-based exit nodes — runner skips goal gate
 
-- **Severity:** MEDIUM
+- **Severity:** HIGH
 - **Category:** Correctness
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:383`
-- **Description:** When an edge with `loopRestart: true` is selected, the runner tail-calls itself and returns the result of the restarted run directly:
+- **Status:** OPEN
+- **File(s):** `src/model/graph.ts:78-80`, `src/validation/rules.ts:41-54`
+- **Description:** `findExitNode` returns a node if its id is `'exit'` or `'end'`. `terminalNodeRule` likewise accepts those ids as valid exit nodes. However `isTerminal` only checks `node.shape === 'Msquare' || node.type === 'exit'` — it never checks `node.id`. If a pipeline uses a node named `exit` (or `end`) without also setting `shape=Msquare` or `type=exit`, validation passes and `findExitNode` returns the node, but `isTerminal` returns `false`. The runner therefore treats the node as a regular work node, executes it, then calls `selectEdge` which returns `null` (no outgoing edges from the exit node), breaks out of the loop — without passing through the goal gate or emitting the terminal-node events.
 
-  ```typescript
-  return run({ ...config, logsRoot: restartLogsRoot, resumeFromCheckpoint: undefined });
-  ```
-
-  The `totalCostUsd` accumulated during the first run (before the restart) is never added to the restarted run's result. Callers that display or log total pipeline cost will silently under-report it whenever a loop restart occurs. In a pipeline that loops several times before exiting, the reported cost could represent only the last iteration.
-
-  The existing test at `test/engine/runner.test.ts:361` verifies that the restarted run executes correctly and that the final status propagates, but it does not assert on `totalCostUsd` and therefore does not catch this gap.
-
-- **Recommendation:** Before issuing the recursive `run()` call, capture the accumulated cost and add it to the returned result:
-
-  ```typescript
-  const restartResult = await run({ ...config, logsRoot: restartLogsRoot, resumeFromCheckpoint: undefined });
-  return { ...restartResult, totalCostUsd: totalCostUsd + restartResult.totalCostUsd };
-  ```
-
-  Add a test that mocks `runCC` to return non-zero `costUsd`, triggers a loop restart, and asserts the final `totalCostUsd` is the sum of both run cycles.
-
----
-
-### FINDING-002: `ConsoleInterviewer` deviates from spec format
-
-- **Severity:** LOW
-- **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/interviewer/console.ts:11-21`
-- **Description:** The SPEC (Section 12.2) defines the following format for the console interviewer:
-
-  ```
-  console.log(`\n[?] ${question.text}  (stage: ${question.stage})`);
-  ```
-
-  followed by type-specific prompts: `"Select: "` for `multiple_choice`, `"[Y/N]: "` for `yes_no`/`confirmation`, and `"> "` for `freeform`.
-
-  The implementation deviates in several ways:
-  1. The opening `[?]` banner with stage identifier is not printed. The stage is silently dropped, making it impossible for a human operator to know which pipeline node is asking the question.
-  2. For `yes_no` and `confirmation` question types, no special `"[Y/N]: "` prompt is shown — the code falls into the `else` branch appending just a space, giving the user no guidance that a yes/no answer is expected.
-  3. For `freeform` questions, no `"> "` prompt is shown — again only a trailing space.
-
-  The practical impact is reduced operator usability: when a long-running pipeline pauses for human input, the operator has no visual cue about which stage is waiting or what kind of input is expected.
-
-- **Recommendation:** Revise `ConsoleInterviewer.ask` to match the spec format:
-
-  ```typescript
-  console.log(`\n[?] ${question.text}  (stage: ${question.stage})`);
-  if (question.type === "multiple_choice" && question.options) {
-    for (const opt of question.options) {
-      console.log(`  [${opt.key}] ${opt.label}`);
-    }
-    const response = await rl.question("Select: ");
-    // ... match logic
-  } else if (question.type === "yes_no" || question.type === "confirmation") {
-    const response = await rl.question("[Y/N]: ");
-    const isYes = ["y", "yes"].includes(response.trim().toLowerCase());
-    return { value: isYes ? "YES" : "NO" };
-  } else if (question.type === "freeform") {
-    const response = await rl.question("> ");
-    return { value: response, text: response };
+  Reproducible example:
+  ```dot
+  digraph G {
+    a [shape=box, prompt="Do A"]
+    start -> a -> exit
   }
   ```
+  This passes validation, `findExitNode` returns `exit`, but `isTerminal(exitNode)` is `false`.
 
----
-
-### FINDING-003: Redundant `$goal` expansion in `CodergenHandler`
-
-- **Severity:** LOW
-- **Category:** Code Quality
-- **Status:** RESOLVED
-- **File(s):** `src/handlers/codergen.ts:128`
-- **Description:** `CodergenHandler.execute` performs `$goal` variable substitution on the node prompt:
-
+- **Recommendation:** Update `isTerminal` to also check `node.id`:
   ```typescript
-  prompt = prompt.replace(/\$goal/g, goal);
+  return node.shape === 'Msquare' || node.type === 'exit' || node.id === 'exit' || node.id === 'end';
   ```
-
-  However, `applyTransforms` (called by the runner at startup) has already performed this substitution before any handler is invoked. After transforms run, no `$goal` token remains in any node prompt, so the `replace` call in `CodergenHandler` is always a no-op. This creates a hidden implicit dependency: if the expansion order were ever changed (e.g., transforms removed or reordered), the codergen handler's copy would silently take over — or vice-versa — making the intent unclear.
-
-  Additionally, `cli.ts:100-101` calls `applyTransforms` explicitly before passing the graph to `run()`, which calls `applyTransforms` a second time internally. The comment says the second call is "a no-op", but the stylesheet applicator re-applies the same values to nodes that lack explicit raw attributes. While functionally idempotent, the claim of "no-op" is slightly imprecise. These three expansion sites create unnecessary fragility.
-
-- **Recommendation:** Remove the `$goal` expansion from `CodergenHandler.execute` (lines 127-128), relying solely on `applyTransforms` for variable substitution. This makes the ownership of `$goal` expansion unambiguous. As a follow-up, add a comment in `transforms.ts` noting that `$goal` substitution is the canonical expansion point for node prompts.
+  Add a test that uses an id-based exit node (no shape/type) and verifies the goal gate is checked and the run terminates correctly.
 
 ---
 
-### FINDING-004: `checkpoint_saved` event carries the completed node ID, not the resume node ID
+### FINDING-002: `ParallelHandler` does not aggregate `costUsd` from branch outcomes
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:410-414`
-- **Description:** After saving a checkpoint, the runner emits:
-
-  ```typescript
-  emit(config, {
-    kind: "checkpoint_saved",
-    nodeId: currentNode.id,   // <-- the node just completed
-    timestamp: Date.now(),
-  });
-  ```
-
-  But the checkpoint saved at line 397 stores `currentNode: edge.to` — the **next** node to execute on resume. The `nodeId` in the event therefore refers to the completed node, while the checkpoint's `currentNode` refers to the node that will run next. Any consumer of `checkpoint_saved` that uses `nodeId` to understand "where the pipeline is checkpointed" will be misled: the event says "node A was checkpointed" but the actual resume point is node B.
-
-  The SPEC defines `checkpoint_saved` with a `nodeId` field but gives no explicit guidance on which node it should name. Given the checkpoint's semantic purpose (save the resume point), `nodeId` in the event should logically match the checkpoint's `currentNode` (i.e., `edge.to`).
-
-- **Recommendation:** Change the `checkpoint_saved` emit to use `edge.to` as the `nodeId`:
-
-  ```typescript
-  emit(config, {
-    kind: "checkpoint_saved",
-    nodeId: edge.to,
-    timestamp: Date.now(),
-  });
-  ```
-
-  Update the test in `test/engine/runner.test.ts` that asserts on `checkpoint_saved` events to verify the correct node ID is reported.
-
----
-
-### FINDING-005: `"warning"` event kind is not in the SPEC's `PipelineEvent` union
-
-- **Severity:** TRIVIAL
-- **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/model/events.ts:33`
-- **Description:** The implementation adds a `"warning"` variant to `PipelineEvent`:
-
-  ```typescript
-  | { kind: "warning"; message: string; nodeId?: string; timestamp: number }
-  ```
-
-  This variant is not listed in SPEC Section 16.1's `PipelineEvent` union. The spec ends at `"error"`. The warning event is currently emitted only by `ParallelHandler` when an unrecognized `join_policy` is encountered (`src/handlers/parallel.ts:90-95`). While this is a useful extension, it is undocumented.
-
-- **Recommendation:** Either (a) add the `"warning"` event to the spec in `docs/SPEC.md` Section 16.1 to formally document this extension, or (b) fold the warning into an `"error"` event with an appropriate severity tag. No action is strictly required — this finding does not break any behavior.
-- **Resolution:** Added `| { kind: "warning"; message: string; nodeId?: string; timestamp: number }` to the `PipelineEvent` union in `docs/SPEC.md` Section 16.1, formally documenting the extension.
-
----
-
-### FINDING-006: `FanInHandler` always returns `"success"` regardless of branch outcomes
-
-- **Severity:** TRIVIAL
-- **Category:** Spec Compliance
 - **Status:** OPEN
-- **File(s):** `src/handlers/fan-in.ts:46-52`
-- **Description:** `FanInHandler.execute` always returns `{ status: "success" }` as the outer status, even when all branches failed:
+- **File(s):** `src/handlers/parallel.ts:140-171`
+- **Description:** When parallel branches contain codergen nodes, each branch accumulates `costUsd` in its `Outcome`. `ParallelHandler.execute` discards all branch outcomes after recording counts/statuses — it never sums `costUsd`:
 
   ```typescript
+  return { status, contextUpdates }; // no costUsd
+  ```
+
+  The runner adds `outcome.costUsd ?? 0` to `totalCostUsd` for each node (including the parallel node), so all cost from inside parallel branches is silently lost. Pipelines with codergen nodes inside parallel handlers under-report `RunResult.totalCostUsd`.
+
+- **Recommendation:** Sum `costUsd` from all branch outcomes and include it in the returned `Outcome`:
+  ```typescript
+  const totalBranchCostUsd = results.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
   return {
-    status: "success",
-    contextUpdates: {
-      "parallel.fan_in.best_outcome": best.status,
-      "parallel.fan_in.best_notes": best.notes ?? "",
-    },
+    status,
+    contextUpdates,
+    ...(totalBranchCostUsd > 0 ? { costUsd: totalBranchCostUsd } : {}),
   };
   ```
+  Add a test that runs parallel branches with mocked codergen costs and verifies `RunResult.totalCostUsd` includes them.
 
-  The best branch outcome (including `"fail"`) is stored in `context["parallel.fan_in.best_outcome"]` for downstream edge conditions to inspect, but the fan-in node itself always succeeds. This means edge selection from a fan-in node cannot use `outcome=fail` to route to an error handler — it must use `context.parallel.fan_in.best_outcome=fail` instead.
+---
 
-  The test at `test/handlers/parallel.test.ts` explicitly asserts this behavior as expected. It is likely intentional — the fan-in is a "reporting" node, not a "gate" node — but it is a subtle semantic difference from what a user might expect.
+### FINDING-003: Path traversal risk in `CodergenHandler` via node id
 
-- **Recommendation:** Add a comment in `fan-in.ts` explicitly documenting that the fan-in node always succeeds and that downstream routing on branch failure should use `context.parallel.fan_in.best_outcome`. No code change is required if this behavior is intentional.
+- **Severity:** MEDIUM
+- **Category:** Security
+- **Status:** OPEN
+- **File(s):** `src/handlers/codergen.ts:168-173`
+- **Description:** The stage directory is constructed as `path.join(config.logsRoot, node.id)`. If a DOT file declares a node with a quoted string id containing `..` path segments (e.g., `"../../etc/cron.d"`), `path.join` resolves the traversal, and `prompt.md`, `response.md`, and `status.json` are written outside the intended logs directory. The DOT parser's `IDENTIFIER` token (`[A-Za-z0-9_.]`) does not allow `/`, but quoted string identifiers can contain arbitrary characters.
+
+  ```typescript
+  const stageDir = path.join(config.logsRoot, node.id); // node.id could be '../../evil'
+  await fs.mkdir(stageDir, { recursive: true });
+  await fs.writeFile(path.join(stageDir, 'prompt.md'), finalPrompt, 'utf-8');
+  ```
+
+- **Recommendation:** Add a path-safety assertion before writing:
+  ```typescript
+  const stageDir = path.join(config.logsRoot, node.id);
+  if (!path.resolve(stageDir).startsWith(path.resolve(config.logsRoot) + path.sep)) {
+    throw new Error(`Node id '${node.id}' would escape logsRoot`);
+  }
+  ```
+  Also add a validation rule that rejects node ids containing `/`, `\`, or `..` segments.
+
+---
+
+### FINDING-004: Spec DoD 17.5 says `FAIL` triggers retry but Section 8.5 algorithm and implementation disagree
+
+- **Severity:** MEDIUM
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/engine/retry.ts:89-91`, `docs/SPEC.md` (Section 17.5 vs Section 8.5)
+- **Description:** SPEC.md Section 17.5 Definition of Done states: *"Nodes with `maxRetries > 0` retried on RETRY or FAIL"*. However, the more detailed pseudocode in Section 8.5 says `IF outcome.status is "fail": RETURN outcome` — no retry. The implementation follows Section 8.5. A test explicitly asserts that FAIL does **not** trigger retry. The DoD checklist and the detailed algorithm are in direct contradiction.
+
+- **Recommendation:** Resolve the internal spec inconsistency. Most likely the correct intent is *"retried on RETRY status only"* (the conservative behaviour already implemented). Update SPEC.md Section 17.5 to read: `"Nodes with maxRetries > 0 retried on RETRY status"`. No code change required.
+
+---
+
+### FINDING-005: No unit tests for `retry.ts` — backoff math, `allowPartial` path, and `buildRetryPolicy` untested
+
+- **Severity:** MEDIUM
+- **Category:** Test Quality
+- **Status:** OPEN
+- **File(s):** `src/engine/retry.ts`, `test/engine/`
+- **Description:** There is no `test/engine/retry.test.ts`. The following behaviours are not directly tested:
+  1. `delayForAttempt` backoff formula and the 60,000 ms cap.
+  2. Jitter range (`0.5 + Math.random()` → 50–150 % of base delay).
+  3. `buildRetryPolicy` fallback from `node.maxRetries === 0` to `graph.attributes.defaultMaxRetry`.
+  4. The `allowPartial=true` exhaustion path that returns `{ status: 'partial_success', notes: 'retries exhausted' }` — this code path is never exercised by any test.
+  5. Exception handling on the final attempt: caught error emitted as a `fail` outcome.
+
+  These are exercised only indirectly through integration tests, making retry-math regressions hard to diagnose.
+
+- **Recommendation:** Add `test/engine/retry.test.ts` with direct unit tests covering: `delayForAttempt` (attempt=1, large attempt capped at `maxDelayMs`), `buildRetryPolicy` (node override vs. graph default), and `executeWithRetry` (allowPartial exhaustion path, initialAttempt parameter for resume).
+
+---
+
+### FINDING-006: Spec Section 10.3 step 5 resume description is stale and contradicts implementation
+
+- **Severity:** LOW
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:161-165`, `docs/SPEC.md` Section 10.3
+- **Description:** SPEC Section 10.3 step 5 says: *"Determine the next node: find the outgoing edge from `checkpoint.currentNode` using the last recorded outcome, then set `currentNode` to the edge's target."* The implementation stores `currentNode: edge.to` in the checkpoint (the pre-resolved next node), so resume reads `graph.nodes.get(checkpoint.currentNode)` directly without re-running edge selection. The code is correct, but the spec describes a different checkpoint design where `currentNode` is the most-recently-completed node. Any reader of the spec attempting to understand resume behaviour will be misled.
+
+- **Recommendation:** Update SPEC.md Section 10.3 step 5 to: *"Restore `currentNode` from `checkpoint.currentNode` (this field contains the next node to execute, already resolved from edge selection before the checkpoint was saved)."* No code change required.
+
+---
+
+### FINDING-007: `buildStatusInstruction` test suite is empty — no assertions
+
+- **Severity:** LOW
+- **Category:** Test Quality
+- **Status:** OPEN
+- **File(s):** `test/handlers/codergen.test.ts` (buildStatusInstruction describe block)
+- **Description:** The `describe('buildStatusInstruction')` block contains a single `it()` with an empty body:
+  ```typescript
+  describe('buildStatusInstruction', () => {
+    it('includes the status file path', () => {
+      // Implicitly tested via the systemPromptAppend tests above
+    });
+  });
+  ```
+  Vitest marks empty test bodies as passed. The function builds multi-line instructions with edge label enumeration — core LLM guidance for the pipeline. The edge-labels listing, status file path, and instruction text are not explicitly verified in isolation.
+
+- **Recommendation:** Replace the empty body with real assertions calling `buildStatusInstruction` directly. Cover: path present in output, edge labels enumerated when edges exist, correct format when no outgoing edges, presence of the `'Do NOT skip writing this file'` text.
+
+---
+
+### FINDING-008: `parseStatusFile` silently defaults to `'success'` on unrecognised or missing outcome
+
+- **Severity:** LOW
+- **Category:** Correctness
+- **Status:** OPEN
+- **File(s):** `src/handlers/codergen.ts:73-86`
+- **Description:** When an LLM writes `"outcome": "done"` or omits the field entirely, `parseStatusFile` silently returns `status: 'success'`:
+  ```typescript
+  } else {
+    status = 'success'; // silent default
+  }
+  ```
+  A missing or unrecognised outcome should arguably default to `'fail'` (requiring explicit success) rather than silently succeeding and allowing the pipeline to continue as if work completed correctly.
+
+- **Recommendation:** Change the default to `status = 'fail'` with `failureReason: 'Missing or unrecognised outcome field in status.json'`. Alternatively keep the current default but emit a `warning` pipeline event so operators are notified. Update the test that currently asserts the `'success'` default.
+
+---
+
+### FINDING-009: `WaitForHumanHandler` default_choice label matching is an undocumented spec extension
+
+- **Severity:** LOW
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/handlers/wait-human.ts:63-69`
+- **Description:** The spec defines default choice lookup as `choices.find(c => c.to === defaultChoice || c.key === defaultChoice)`. The implementation adds a third case-insensitive condition: `c.label.toLowerCase() === defaultChoiceId.toLowerCase()`. Not a bug — it is a usability improvement — but it is an undocumented deviation.
+
+- **Recommendation:** Document this as an intentional extension in either a code comment or the spec. No code change required.
+
+---
+
+### FINDING-010: Runner does not write per-node outcome to `{logsRoot}/{nodeId}/status.json`
+
+- **Severity:** LOW
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts`, `docs/SPEC.md` Section 17.3
+- **Description:** SPEC DoD Section 17.3 states: *"Outcome written to `{logsRoot}/{nodeId}/status.json`"*. The runner never writes per-node outcome files for non-codergen nodes (tool, conditional, wait-human, parallel, fan-in). Only `CodergenHandler` writes a `status.json`. The DoD is ambiguous about whether this applies to all node types or only codergen nodes.
+
+- **Recommendation:** Clarify the spec: if all node types should emit outcome artifacts, add a `fs.writeFile` call in the runner after `executeWithRetry`. If only codergen nodes, update the DoD wording to reflect that.
+
+---
+
+### FINDING-011: `ToolHandler` does not support context variable interpolation in `tool_command`
+
+- **Severity:** LOW
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/handlers/tool.ts:74-80`
+- **Description:** `ToolHandler` executes `tool_command` verbatim without substituting context variables. By contrast, `CodergenHandler` benefits from `$goal` substitution via `applyTransforms`. A user who writes `tool_command="run-tests --dir ${context.build_dir}"` in a DOT file will find the literal string passed unchanged to the shell. This limitation is not documented.
+
+- **Recommendation:** Document this limitation explicitly in the spec and/or code comments. Optionally, apply the same `applyTransforms` variable substitution to `tool_command` values.
+
+---
+
+### FINDING-012: `StartHandler` and `ExitHandler` classes are dead code in the production path
+
+- **Severity:** TRIVIAL
+- **Category:** Code Quality
+- **Status:** OPEN
+- **File(s):** `src/handlers/start.ts`, `src/handlers/exit.ts`, `src/engine/runner.ts:104-112`
+- **Description:** `StartHandler` and `ExitHandler` are defined, tested, and exported from `src/index.ts`. However, `runner.ts` never imports them — it registers anonymous inline handler objects instead:
+  ```typescript
+  registry.register('start', { async execute(): Promise<Outcome> { return { status: 'success' }; } });
+  registry.register('exit',  { async execute(): Promise<Outcome> { return { status: 'success' }; } });
+  ```
+  The class files exist as library exports for external consumers but this intent is not documented.
+
+- **Recommendation:** Either: (a) Have the runner import and use `StartHandler`/`ExitHandler` to eliminate duplication and make the tests exercise production code, or (b) Add a comment in `src/index.ts` noting these are exported for library consumers.
+
+---
+
+### FINDING-013: `ToolHandler` full stderr as `failureReason` — large multi-line output pollutes context
+
+- **Severity:** TRIVIAL
+- **Category:** Code Quality
+- **Status:** OPEN
+- **File(s):** `src/handlers/tool.ts:93-97`
+- **Description:** When a tool exits with a non-zero code, `failureReason` is set to the full `stderr` string (up to 5000 chars), which can be multi-line compiler/test output. This propagates verbatim into pipeline events, checkpoints, and preambles.
+
+- **Recommendation:** Truncate `failureReason` to the first line of stderr (or first 200 characters) and preserve full stderr only in `contextUpdates['tool.stderr']`.
 
 ---
 
 ## Statistics
 
-- Total findings: 6
+- Total findings: 13
 - Critical: 0
-- High: 0
-- Medium: 1
-- Low: 3
+- High: 1
+- Medium: 3
+- Low: 7
 - Trivial: 2
