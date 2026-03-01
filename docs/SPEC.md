@@ -1958,7 +1958,7 @@ Events are fire-and-forget. The `onEvent` callback must not throw. If it does, t
 
 ### 17.5 Retry Logic
 
-- [ ] Nodes with `maxRetries > 0` retried on RETRY or FAIL
+- [ ] Nodes with `maxRetries > 0` retried on RETRY status
 - [ ] Retry count tracked per-node
 - [ ] Exponential backoff with jitter
 - [ ] `allowPartial` produces PARTIAL_SUCCESS on exhaustion

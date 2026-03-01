@@ -93,7 +93,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** MEDIUM
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/retry.ts:89-91`, `docs/SPEC.md` (Section 17.5 vs Section 8.5)
 - **Description:** SPEC.md Section 17.5 Definition of Done states: *"Nodes with `maxRetries > 0` retried on RETRY or FAIL"*. However, the more detailed pseudocode in Section 8.5 says `IF outcome.status is "fail": RETURN outcome` — no retry. The implementation follows Section 8.5. A test explicitly asserts that FAIL does **not** trigger retry. The DoD checklist and the detailed algorithm are in direct contradiction.
 
