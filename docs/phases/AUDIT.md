@@ -238,7 +238,7 @@ All 25 issues have been resolved in the phase specs.
 | # | Resolution | Phase(s) Modified |
 |---|-----------|-------------------|
 | 1 | Added `house → stack.manager_loop` to SHAPE_TO_TYPE + stub fail handler | 2, 5 |
-| 2 | Added explicit FAIL/RETRY/exception semantics + retry test cases | 5 |
+| 2 | Added explicit FAIL/RETRY/exception semantics + retry test cases with registry injection | 5 |
 | 3 | loopRestart deferred with throw "not yet implemented" | 5 |
 | 4 | Added simplification note to lexer acknowledging BNF divergence | 1 |
 | 5 | Moved Context class + tests from Phase 4 to Phase 1 | 1, 3, 4 |
@@ -254,7 +254,7 @@ All 25 issues have been resolved in the phase specs.
 | 15 | Added `lastEdge` tracking for fidelity/thread resolution | 5 |
 | 16 | Added "unrecognized properties silently ignored" behavior | 3 |
 | 17 | Fully specified `executeBranch` behavior (retry, context, events, termination) | 8 |
-| 18 | Added checkpoint resume test | 4 |
+| 18 | Added checkpoint unit test (Phase 4) + runner-level resume integration test (Phase 5) | 4, 5 |
 | 19 | Added SDK compatibility note for mock structure | 7 |
 | 20 | Added SKIPPED status note in retry semantics | 5 |
 | 21 | Added `src/validation/rules.ts` to Phase 3 files to update | 3 |

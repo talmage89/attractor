@@ -151,6 +151,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { saveCheckpoint, loadCheckpoint } from "../../src/model/checkpoint";
+import { Context } from "../../src/model/context";
 
 describe("Checkpoint", () => {
   let tmpDir: string;

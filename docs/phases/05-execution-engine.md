@@ -194,6 +194,7 @@ interface RunConfig {
   onEvent?: (event: PipelineEvent) => void;
   resumeFromCheckpoint?: string;
   ccPermissionMode?: "default" | "acceptEdits" | "bypassPermissions";
+  registry?: HandlerRegistry;   // optional; if omitted, run() creates the default registry
 }
 
 interface RunResult {
@@ -482,6 +483,7 @@ import { run } from "../../src/engine/runner";
 import { parse } from "../../src/parser/parser";
 import { Context } from "../../src/model/context";
 import type { PipelineEvent } from "../../src/model/events";
+import { HandlerRegistry } from "../../src/handlers/registry";
 import type { Handler } from "../../src/handlers/registry";
 import type { Outcome } from "../../src/model/outcome";
 
@@ -686,13 +688,14 @@ describe("execution engine", () => {
         return { status: "success", notes: "Finally worked" };
       },
     };
+    const registry = new HandlerRegistry(retryThenSuccessHandler);
 
     const result = await run({
       graph,
       cwd: tmpDir,
       logsRoot: path.join(tmpDir, "logs"),
       interviewer: noopInterviewer,
-      // Inject custom handler via registry
+      registry,
     });
 
     // The handler should have been called 3 times (2 retries + 1 success)
@@ -718,17 +721,74 @@ describe("execution engine", () => {
         return { status: "fail", failureReason: "Immediate failure" };
       },
     };
+    const registry = new HandlerRegistry(failHandler);
 
     const result = await run({
       graph,
       cwd: tmpDir,
       logsRoot: path.join(tmpDir, "logs"),
       interviewer: noopInterviewer,
-      // Inject custom handler via registry
+      registry,
     });
 
     // Handler called exactly once — fail does not retry
     expect(callCount).toBe(1);
+  });
+
+  it("resumes from a checkpoint, skipping already-completed nodes", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test resume"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box, prompt="Do A"]
+        b [shape=box, prompt="Do B"]
+        c [shape=box, prompt="Do C"]
+        s -> a -> b -> c -> e
+      }
+    `);
+
+    const logsRoot = path.join(tmpDir, "logs");
+
+    // First run: save a checkpoint after completing nodes a and b
+    const { saveCheckpoint } = await import("../../src/model/checkpoint");
+    await fs.mkdir(logsRoot, { recursive: true });
+    await saveCheckpoint({
+      timestamp: Date.now(),
+      currentNode: "c",
+      completedNodes: ["a", "b"],
+      nodeRetries: {},
+      contextValues: { "graph.goal": "Test resume", outcome: "success" },
+      sessionMap: {},
+    }, logsRoot);
+
+    // Resume from checkpoint — engine should skip a and b, execute c
+    const callLog: string[] = [];
+    const trackingHandler: Handler = {
+      async execute(node: any): Promise<Outcome> {
+        callLog.push(node.id);
+        return { status: "success" };
+      },
+    };
+    const registry = new HandlerRegistry(trackingHandler);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot,
+      interviewer: noopInterviewer,
+      resumeFromCheckpoint: path.join(logsRoot, "checkpoint.json"),
+      registry,
+    });
+
+    expect(result.status).toBe("success");
+    expect(result.completedNodes).toContain("a");  // restored from checkpoint
+    expect(result.completedNodes).toContain("b");  // restored from checkpoint
+    expect(result.completedNodes).toContain("c");  // executed during resume
+    // Handler should NOT have been called for a or b (already completed)
+    expect(callLog).not.toContain("a");
+    expect(callLog).not.toContain("b");
+    expect(callLog).toContain("c");
   });
 
   it("handles pipeline with no work nodes (start -> exit)", async () => {
@@ -753,15 +813,11 @@ describe("execution engine", () => {
 });
 ```
 
-Note: The runner tests in this phase use whatever default handler the
-registry provides. In Phase 6, we register real handlers and can test
-richer behavior. For Phase 5, the focus is on the traversal mechanics:
-does the engine visit the right nodes in the right order?
-
-To enable this, the `run()` function should accept an optional
-`handlerOverride` or the tests should be able to inject a custom registry.
-The cleanest approach: `RunConfig` accepts an optional `registry: HandlerRegistry`.
-If not provided, `run()` creates the default registry with all built-in handlers.
+Note: Most runner tests use whatever default handler the registry provides.
+Tests that need specific handler behavior (retry, fail) inject a custom
+`HandlerRegistry` via `RunConfig.registry`. If `registry` is not provided,
+`run()` creates the default registry with all built-in handlers. In Phase 6,
+real handlers are registered and richer behavior can be tested.
 
 ---
 
@@ -779,6 +835,7 @@ If not provided, `run()` creates the default registry with all built-in handlers
 - [ ] Retry: RETRY triggers retry loop up to maxAttempts
 - [ ] Retry: caught exceptions trigger retry with backoff
 - [ ] Engine handles start-to-exit with no work nodes
+- [ ] Resume from checkpoint skips already-completed nodes and continues from saved position
 - [ ] Start and exit nodes are executed but NOT added to completedNodes
 - [ ] Incoming edge is tracked and passed to fidelity/thread resolution
 - [ ] Engine stores `__completedNodes` and `__nodeOutcomes` on context
