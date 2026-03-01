@@ -204,6 +204,62 @@ describe("validation", () => {
       const rule = diags.filter(d => d.rule === "fidelity_valid");
       expect(rule.length).toBeGreaterThan(0);
     });
+
+    it("warns on invalid edge fidelity mode", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e [fidelity="typo"]
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "fidelity_valid");
+      expect(rule.length).toBeGreaterThan(0);
+      expect(rule[0].edge).toEqual({ from: "s", to: "e" });
+    });
+
+    it("does not warn on valid edge fidelity mode", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e [fidelity="compact"]
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "fidelity_valid");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("warns on invalid graph default_fidelity", () => {
+      const graph = parse(`
+        digraph G {
+          graph [default_fidelity="bad_mode"]
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "fidelity_valid");
+      expect(rule.length).toBeGreaterThan(0);
+      expect(rule[0].message).toContain("default_fidelity");
+    });
+
+    it("does not warn on valid graph default_fidelity", () => {
+      const graph = parse(`
+        digraph G {
+          graph [default_fidelity="full"]
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "fidelity_valid");
+      expect(rule).toHaveLength(0);
+    });
   });
 
   describe("goalGateHasRetryRule", () => {

@@ -210,6 +210,23 @@ function fidelityValidRule(graph: Graph): Diagnostic[] {
       });
     }
   }
+  for (const edge of graph.edges) {
+    if (edge.fidelity && !VALID_FIDELITY.has(edge.fidelity)) {
+      diags.push({
+        rule: "fidelity_valid",
+        severity: "warning",
+        message: `Invalid fidelity mode '${edge.fidelity}' on edge ${edge.from} -> ${edge.to}`,
+        edge: { from: edge.from, to: edge.to },
+      });
+    }
+  }
+  if (graph.attributes.defaultFidelity && !VALID_FIDELITY.has(graph.attributes.defaultFidelity)) {
+    diags.push({
+      rule: "fidelity_valid",
+      severity: "warning",
+      message: `Invalid default_fidelity '${graph.attributes.defaultFidelity}'`,
+    });
+  }
   return diags;
 }
 

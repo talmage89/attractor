@@ -50,7 +50,7 @@ The codebase is in excellent shape after five prior review cycles with all previ
 
 - **Severity:** LOW
 - **Category:** Spec Compliance / Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/validation/rules.ts:201-214`
 - **Description:** The `fidelityValidRule` only validates `node.fidelity` values but ignores `edge.fidelity`. A user who writes `a -> b [fidelity="typo"]` will get no warning, and `resolveFidelity` will silently use it as a `FidelityMode` (via an unsafe cast: `incomingEdge.fidelity as FidelityMode`). Since edge-level fidelity now takes the highest priority in the resolution chain (after FINDING-001 in review cycle 5), invalid edge fidelity values are more likely to have runtime impact than invalid node fidelity values. Similarly, `graph.attributes.defaultFidelity` is not validated.
 - **Recommendation:** Extend `fidelityValidRule` to check edge fidelity values: iterate over `graph.edges` and flag any `edge.fidelity` that is non-empty and not in `VALID_FIDELITY`. Also check `graph.attributes.defaultFidelity` if non-empty.
