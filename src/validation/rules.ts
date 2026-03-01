@@ -159,6 +159,23 @@ function stylesheetSyntaxRule(graph: Graph): Diagnostic[] {
   return [];
 }
 
+function stylesheetUnknownPropertyRule(graph: Graph): Diagnostic[] {
+  const stylesheet = graph.attributes.modelStylesheet;
+  if (!stylesheet) return [];
+  const unknownProperties: string[] = [];
+  try {
+    parseStylesheet(stylesheet, unknownProperties);
+  } catch {
+    // Syntax errors are reported by stylesheetSyntaxRule
+    return [];
+  }
+  return unknownProperties.map((prop) => ({
+    rule: "stylesheet_unknown_property",
+    severity: "warning" as const,
+    message: `Unrecognized stylesheet property '${prop}'; known properties are: llm_model, llm_provider, reasoning_effort`,
+  }));
+}
+
 const KNOWN_TYPES = new Set([
   "start",
   "exit",
@@ -312,6 +329,7 @@ export const BUILT_IN_RULES: LintRule[] = [
   edgeTargetExistsRule,
   conditionSyntaxRule,
   stylesheetSyntaxRule,
+  stylesheetUnknownPropertyRule,
   typeKnownRule,
   fidelityValidRule,
   retryTargetExistsRule,

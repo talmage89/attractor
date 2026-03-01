@@ -10,7 +10,7 @@ export interface StyleRule {
 
 const KNOWN_PROPERTIES = new Set(["llm_model", "llm_provider", "reasoning_effort"]);
 
-export function parseStylesheet(source: string): StyleRule[] {
+export function parseStylesheet(source: string, unknownProperties?: string[]): StyleRule[] {
   const rules: StyleRule[] = [];
   let pos = 0;
 
@@ -86,8 +86,9 @@ export function parseStylesheet(source: string): StyleRule[] {
 
       if (property && KNOWN_PROPERTIES.has(property)) {
         declarations.set(property, value);
+      } else if (property && unknownProperties) {
+        unknownProperties.push(property);
       }
-      // Unrecognized properties are silently ignored
     }
 
     if (pos >= source.length) throw new Error("Unterminated stylesheet block");

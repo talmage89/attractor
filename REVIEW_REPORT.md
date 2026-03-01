@@ -18,7 +18,7 @@ This is the fifteenth code review pass of the Attractor TypeScript DAG pipeline 
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/stylesheet/parser.ts:87-90`
 - **Description:** The spec (Section 13.2) states: "Recognized properties: `llm_model`, `llm_provider`, `reasoning_effort`. Unrecognized properties are ignored **with a warning**." The implementation at `parser.ts:87-90` silently skips unrecognized properties with only a source comment:
 

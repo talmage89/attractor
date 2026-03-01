@@ -573,6 +573,67 @@ describe("validation", () => {
     });
   });
 
+  describe("stylesheetUnknownPropertyRule", () => {
+    it("does not warn when all properties are known", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("e", { shape: "Msquare" }),
+      ]);
+      graph.attributes.modelStylesheet = "* { llm_model: claude-3; llm_provider: anthropic; reasoning_effort: high; }";
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "stylesheet_unknown_property");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("warns on a single unrecognized property", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("e", { shape: "Msquare" }),
+      ]);
+      graph.attributes.modelStylesheet = "* { llm_Model: claude-3; }";
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "stylesheet_unknown_property");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("llm_Model");
+    });
+
+    it("warns once per unrecognized property, not once per rule", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("e", { shape: "Msquare" }),
+      ]);
+      graph.attributes.modelStylesheet = "* { model: claude-3; } .code { reasoning-effort: high; }";
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "stylesheet_unknown_property");
+      expect(rule).toHaveLength(2);
+      expect(rule.some(d => d.message.includes("model"))).toBe(true);
+      expect(rule.some(d => d.message.includes("reasoning-effort"))).toBe(true);
+    });
+
+    it("does not warn when there is no stylesheet", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("e", { shape: "Msquare" }),
+      ]);
+      // modelStylesheet is "" by default in makeGraph
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "stylesheet_unknown_property");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not produce unknown-property warnings for syntactically invalid stylesheets", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("e", { shape: "Msquare" }),
+      ]);
+      graph.attributes.modelStylesheet = "invalid syntax";
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "stylesheet_unknown_property");
+      expect(rule).toHaveLength(0);
+    });
+  });
+
   describe("retryTargetExistsRule", () => {
     it("does not flag a node whose retry_target references an existing node", () => {
       const graph = makeGraph([
