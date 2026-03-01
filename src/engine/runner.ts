@@ -380,7 +380,8 @@ export async function run(config: RunConfig): Promise<RunResult> {
       // Per spec Section 8.2 step g: restart the run with a fresh logsRoot.
       // A new sibling directory is used so logs from each cycle are preserved.
       const restartLogsRoot = `${config.logsRoot}-restart-${Date.now()}`;
-      return run({ ...config, logsRoot: restartLogsRoot, resumeFromCheckpoint: undefined });
+      const restartResult = await run({ ...config, logsRoot: restartLogsRoot, resumeFromCheckpoint: undefined });
+      return { ...restartResult, totalCostUsd: totalCostUsd + restartResult.totalCostUsd };
     }
 
     // CHECKPOINT — intentionally placed after edge selection (spec step e)

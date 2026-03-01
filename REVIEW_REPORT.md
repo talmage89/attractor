@@ -16,7 +16,7 @@ The Attractor codebase is in excellent shape after nine prior review cycles. All
 
 - **Severity:** MEDIUM
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:383`
 - **Description:** When an edge with `loopRestart: true` is selected, the runner tail-calls itself and returns the result of the restarted run directly:
 

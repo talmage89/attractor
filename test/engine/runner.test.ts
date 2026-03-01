@@ -396,6 +396,44 @@ describe("execution engine", () => {
     expect(result.status).toBe("success");
   });
 
+  it("accumulates totalCostUsd across loop restart iterations", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test loop restart cost"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a
+        a -> a [loop_restart=true, condition="outcome=success"]
+        a -> e  [condition="outcome=fail"]
+      }
+    `);
+
+    let callCount = 0;
+    const costPerCall = 1.5;
+    const loopHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        callCount++;
+        return callCount === 1
+          ? { status: "success", costUsd: costPerCall }
+          : { status: "fail", costUsd: costPerCall };
+      },
+    };
+    const registry = new HandlerRegistry(loopHandler);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    expect(callCount).toBe(2);
+    // totalCostUsd must be the sum of both run cycles
+    expect(result.totalCostUsd).toBeCloseTo(costPerCall * 2);
+  });
+
   it("handles pipeline with no work nodes (start -> exit)", async () => {
     const graph = parse(`
       digraph G {
