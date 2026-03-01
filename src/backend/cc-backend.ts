@@ -51,7 +51,7 @@ export async function runCC(
       allowDangerouslySkipPermissions,
     };
 
-    queryOptions.model = options.model ?? "claude-sonnet-4-5-20250514";
+    queryOptions.model = options.model ?? "claude-sonnet-4-6";
     queryOptions.maxTurns = options.maxTurns ?? 200;
     if (options.reasoningEffort !== undefined) queryOptions.effort = options.reasoningEffort;
     if (options.sessionId !== undefined) queryOptions.sessionId = options.sessionId;

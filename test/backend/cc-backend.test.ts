@@ -205,7 +205,7 @@ describe("runCC", () => {
     expect(mockQuery).toHaveBeenCalledWith(
       expect.objectContaining({
         options: expect.objectContaining({
-          model: "claude-sonnet-4-5-20250514",
+          model: "claude-sonnet-4-6",
           maxTurns: 200,
         }),
       })
