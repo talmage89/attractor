@@ -336,7 +336,7 @@ class Parser {
       if (this.check("SEMICOLON")) { this.advance(); continue; }
 
       const keyToken = this.peek();
-      if (keyToken.kind !== "IDENTIFIER") break;
+      if (keyToken.kind !== "IDENTIFIER" && keyToken.kind !== "STRING") break;
       this.advance();
       const key = keyToken.value;
 
