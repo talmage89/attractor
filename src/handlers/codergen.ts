@@ -83,6 +83,12 @@ export function parseStatusFile(data: unknown, nodeId: string): Outcome {
   ) {
     status = outcomeStr as StageStatus;
   } else {
+    // Deliberate deviation from spec (Section 10.2 shows `?? "success"`): we
+    // default to "fail" instead of "success" when the outcome field is missing
+    // or unrecognised. This "fail-safe" behaviour prevents a pipeline from
+    // silently succeeding when the codergen agent failed to write a valid
+    // status.json (e.g. due to a crash, timeout, or output truncation). The
+    // spec default of "success" could mask such failures entirely.
     status = "fail";
     defaultedFailReason = "Missing or unrecognised outcome field in status.json";
   }
