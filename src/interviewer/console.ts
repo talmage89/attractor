@@ -8,19 +8,13 @@ export class ConsoleInterviewer implements Interviewer {
       output: process.stdout,
     });
     try {
-      let prompt = question.text;
+      console.log(`\n[?] ${question.text}  (stage: ${question.stage})`);
+
       if (question.type === "multiple_choice" && question.options) {
         for (const opt of question.options) {
-          prompt += `\n  [${opt.key}] ${opt.label}`;
+          console.log(`  [${opt.key}] ${opt.label}`);
         }
-        prompt += "\nChoice: ";
-      } else {
-        prompt += " ";
-      }
-
-      const response = await rl.question(prompt);
-
-      if (question.type === "multiple_choice" && question.options) {
+        const response = await rl.question("Select: ");
         const match = question.options.find(
           (opt) =>
             opt.key.toLowerCase() === response.trim().toLowerCase() ||
@@ -29,9 +23,15 @@ export class ConsoleInterviewer implements Interviewer {
         if (match) {
           return { value: match.key, selectedOption: match };
         }
+        return { value: response.trim() };
+      } else if (question.type === "yes_no" || question.type === "confirmation") {
+        const response = await rl.question("[Y/N]: ");
+        const isYes = ["y", "yes"].includes(response.trim().toLowerCase());
+        return { value: isYes ? "YES" : "NO" };
+      } else {
+        const response = await rl.question("> ");
+        return { value: response, text: response };
       }
-
-      return { value: response.trim() };
     } finally {
       rl.close();
     }

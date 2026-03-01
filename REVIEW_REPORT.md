@@ -43,7 +43,7 @@ The Attractor codebase is in excellent shape after nine prior review cycles. All
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/interviewer/console.ts:11-21`
 - **Description:** The SPEC (Section 12.2) defines the following format for the console interviewer:
 
