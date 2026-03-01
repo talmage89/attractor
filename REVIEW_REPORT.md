@@ -18,7 +18,7 @@ This is the fourteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** HIGH
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:218-257`, `docs/SPEC.md:993-996`
 - **Description:** The spec (Section 9.5, step 9) defines an AUTO STATUS step:
 

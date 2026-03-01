@@ -454,6 +454,61 @@ describe("CodergenHandler", () => {
     ).rejects.toThrow(/would escape logsRoot/);
   });
 
+  it("autoStatus=true: returns success when CC fails and no status file is written", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt="Do work", auto_status=true]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC.mockResolvedValueOnce(
+      makeCCResult({ success: false, errors: ["Agent crashed"], errorSubtype: "error_during_execution" })
+    );
+
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+    const outcome = await handler.execute(
+      graph.nodes.get("work")!,
+      new Context(),
+      graph,
+      config as any
+    );
+
+    expect(outcome.status).toBe("success");
+    expect(outcome.notes).toContain("auto-status");
+  });
+
+  it("autoStatus=false (default): still returns fail when CC fails and no status file", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt="Do work"]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC.mockResolvedValueOnce(
+      makeCCResult({ success: false, errors: ["Agent crashed"] })
+    );
+
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+    const outcome = await handler.execute(
+      graph.nodes.get("work")!,
+      new Context(),
+      graph,
+      config as any
+    );
+
+    expect(outcome.status).toBe("fail");
+  });
+
   it("includes outgoing edge labels in status instruction", async () => {
     const graph = parse(`
       digraph G {

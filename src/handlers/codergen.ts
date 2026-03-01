@@ -216,11 +216,13 @@ export class CodergenHandler implements Handler {
 
     // 8. Read status file
     let outcome: Outcome;
+    let statusFileAbsent = false;
     try {
       const statusContent = await fs.readFile(statusFilePath, "utf-8");
       const statusData = JSON.parse(statusContent) as unknown;
       outcome = parseStatusFile(statusData, node.id);
     } catch {
+      statusFileAbsent = true;
       // No status file or parse error — fall back to CC result
       if (ccResult.success) {
         outcome = {
@@ -239,6 +241,16 @@ export class CodergenHandler implements Handler {
           failureReason: failReason,
         };
       }
+    }
+
+    // 8.5 AUTO STATUS: when auto_status=true and no status file was written, override
+    // a fail outcome to success so the pipeline can proceed past nodes that don't need
+    // to communicate structured results (spec Section 9.5, step 9).
+    if (node.autoStatus && statusFileAbsent && outcome.status === "fail") {
+      outcome = {
+        status: "success",
+        notes: "auto-status: agent completed without writing status.json",
+      };
     }
 
     // Propagate cost from CC result so callers can surface it in stage_completed events
