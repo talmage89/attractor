@@ -1,148 +1,108 @@
 # Code Review Report
 
 **Date:** 2026-03-01
-**Reviewer:** AI Agent (fifth-pass)
-**Test Status:** All passing (252/252)
+**Reviewer:** AI Agent (sixth-pass)
+**Test Status:** All passing (255/255)
 
 ## Summary
 
-The codebase is in excellent shape after four prior review cycles with all previous findings resolved. This fifth-pass review found a medium-severity spec compliance gap (edge-level fidelity and thread_id overrides are silently ignored), three low-severity correctness and compliance issues (infinite goal-gate retry loop, always-empty nodeRetries in checkpoints, error events not printed by default without --verbose), and three trivial issues.
+The codebase is in excellent shape after five prior review cycles with all previous findings resolved. This sixth-pass review found no critical or high-severity issues. Four low-severity findings were identified: a priority-order inconsistency between `resolveThreadId` and `resolveFidelity`, a gap in the `goalGateHasRetryRule` validation (misses `fallbackRetryTarget` at the graph level), edge fidelity values not being validated, and ToolHandler stderr not being exposed in context. Two trivial issues were also found: an unused constructor parameter and an outdated default model string.
 
 ---
 
 ## Findings
 
-### FINDING-001: Edge-level `fidelity` and `thread_id` attributes are never applied
+### FINDING-001: `resolveThreadId` checks node-level before edge-level, inconsistent with `resolveFidelity`
 
-- **Severity:** MEDIUM
+- **Severity:** LOW
+- **Category:** Spec Compliance / Correctness
+- **Status:** OPEN
+- **File(s):** `src/model/fidelity.ts:22-32`
+- **Description:** `resolveFidelity` correctly gives edge-level fidelity the highest priority (edge → node → graph → default). However, `resolveThreadId` has a different priority order: node-level `threadId` is checked *before* the incoming edge's `threadId`:
+  ```typescript
+  export function resolveThreadId(...): string {
+    if (node.threadId) return node.threadId;           // node first
+    if (incomingEdge?.threadId) return incomingEdge.threadId;  // edge second
+    ...
+  }
+  ```
+  The FINDING-001 resolution from review cycle 5 established that "edge-level fidelity/threadId has higher priority than node-level in the resolution chain." `resolveFidelity` honours this, but `resolveThreadId` does not: an edge-level `thread_id` attribute is silently ignored whenever the destination node already has an explicit `threadId`. A user writing `a -> b [thread_id="shared"]` where `b` has `thread_id="isolated"` would expect the edge to have no effect, but if they reverse it (no node threadId, edge threadId set), it would work. The inconsistency is confusing and deviates from the stated spec intent.
+- **Recommendation:** Swap the priority order in `resolveThreadId` to mirror `resolveFidelity`: check `incomingEdge?.threadId` before `node.threadId`. Update the fidelity tests to verify edge > node for threadId.
+
+---
+
+### FINDING-002: `goalGateHasRetryRule` does not check `graph.attributes.fallbackRetryTarget`
+
+- **Severity:** LOW
 - **Category:** Spec Compliance / Correctness
 - **Status:** RESOLVED
-- **File(s):** `src/handlers/codergen.ts:135,139`, `src/model/fidelity.ts:11-32`, `src/engine/runner.ts:21-38`
-- **Description:** The `Edge` interface has `fidelity: string` and `threadId: string` fields, and the `resolveFidelity`/`resolveThreadId` functions accept an optional `incomingEdge?: Edge` parameter specifically to honour these overrides (edge-level fidelity/threadId has higher priority than node-level in the resolution chain). However, no code path ever passes the incoming edge to these functions:
-  - `CodergenHandler.execute()` calls `resolveFidelity(node, graph)` (line 135) and `resolveThreadId(node, graph)` (line 139), omitting the third argument entirely.
-  - `RunConfig` does not expose the incoming edge that led to the current node, so handlers have no way to access it.
-
-  As a result, a user who sets `fidelity="full"` or `thread_id="shared"` on an *edge* (e.g., `a -> b [fidelity="full"]`) would see no effect — `resolveFidelity` will skip the `incomingEdge?.fidelity` branch and fall through to the node-level or graph-level defaults. This makes edge-level fidelity and threadId effectively dead attributes despite being parsed and stored in the Edge model.
-- **Recommendation:** Add an optional `incomingEdge?: Edge` field to `RunConfig` (in `src/engine/runner.ts`). Before calling `executeWithRetry`, the runner should set this field to the edge that was selected (`edge` from `selectEdge`). Then `CodergenHandler` can read `config.incomingEdge` and pass it to `resolveFidelity` and `resolveThreadId`. No API breaking change is needed since the field would be optional.
+- **File(s):** `src/validation/rules.ts:239-256`
+- **Description:** The `resolveRetryTarget` function (the runtime logic) checks four sources in priority order: `node.retryTarget → node.fallbackRetryTarget → graph.attributes.retryTarget → graph.attributes.fallbackRetryTarget`. The validation rule `goalGateHasRetryRule` is supposed to warn when a goal gate node has no reachable retry target, but it only checks `graph.attributes.retryTarget`, not `graph.attributes.fallbackRetryTarget`:
+  ```typescript
+  const graphHasRetry = !!graph.attributes.retryTarget;  // ← misses fallbackRetryTarget
+  ```
+  As a result, a graph with `fallback_retry_target="start"` (but no `retry_target`) would trigger a spurious warning on every goal gate node, even though the runtime would successfully find the fallback retry target. This creates false-positive warnings that could confuse users.
+- **Recommendation:** Change the check to: `const graphHasRetry = !!graph.attributes.retryTarget || !!graph.attributes.fallbackRetryTarget;`
 
 ---
 
-### FINDING-002: Goal-gate retry loop has no iteration limit
+### FINDING-003: Edge fidelity values are not validated by `fidelityValidRule`
 
 - **Severity:** LOW
-- **Category:** Correctness
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:221-231`
-- **Description:** When the terminal node's goal-gate check fails and a `retryTarget` is found, the runner sets `currentNode = retryNode` and continues the traversal loop with no guard on how many times this can happen:
-  ```typescript
-  if (!gateResult.satisfied && gateResult.failedNode) {
-    const retryTarget = resolveRetryTarget(gateResult.failedNode, graph);
-    if (retryTarget) {
-      const retryNode = graph.nodes.get(retryTarget)!;
-      currentNode = retryNode;
-      continue loop;  // ← no counter, no max
-    }
-    ...
-  }
-  ```
-  If the retry subgraph consistently produces a failing outcome for the goal-gate node (e.g., the LLM can't satisfy the goal), the pipeline will loop indefinitely, consuming resources and never terminating. The per-node retry policy (via `RetryPolicy.maxAttempts`) only limits retries within a single handler invocation, not goal-gate-driven re-traversals.
-- **Recommendation:** Introduce a goal-gate retry counter. Track the number of goal-gate-driven restarts (e.g., `let goalGateRetries = 0`) and compare it against a configurable maximum (e.g., from `graph.attributes.defaultMaxRetry` or a new `max_goal_gate_retries` attribute). When the limit is exceeded, break the loop with `finalStatus = "fail"`.
+- **Category:** Spec Compliance / Test Quality
+- **Status:** OPEN
+- **File(s):** `src/validation/rules.ts:201-214`
+- **Description:** The `fidelityValidRule` only validates `node.fidelity` values but ignores `edge.fidelity`. A user who writes `a -> b [fidelity="typo"]` will get no warning, and `resolveFidelity` will silently use it as a `FidelityMode` (via an unsafe cast: `incomingEdge.fidelity as FidelityMode`). Since edge-level fidelity now takes the highest priority in the resolution chain (after FINDING-001 in review cycle 5), invalid edge fidelity values are more likely to have runtime impact than invalid node fidelity values. Similarly, `graph.attributes.defaultFidelity` is not validated.
+- **Recommendation:** Extend `fidelityValidRule` to check edge fidelity values: iterate over `graph.edges` and flag any `edge.fidelity` that is non-empty and not in `VALID_FIDELITY`. Also check `graph.attributes.defaultFidelity` if non-empty.
 
 ---
 
-### FINDING-003: `nodeRetries` is always serialized as `{}` in checkpoints
+### FINDING-004: `ToolHandler` does not expose `tool.stderr` in context updates
 
 - **Severity:** LOW
-- **Category:** Correctness / Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:312-323`, `src/engine/runner.ts:345-356`, `src/model/checkpoint.ts:5-13`
-- **Description:** The `Checkpoint` interface includes a `nodeRetries: Record<string, number>` field, which implies intent to persist per-node retry counts so that a resumed pipeline knows how many retries have already been consumed. However, the runner always saves `nodeRetries: {}`:
+- **Category:** Correctness / Usability
+- **Status:** OPEN
+- **File(s):** `src/handlers/tool.ts:82-98`
+- **Description:** The `ToolHandler` captures stderr from the shell command but only exposes stdout as `tool.output` and exit code as `tool.exit_code` in context updates:
   ```typescript
-  await saveCheckpoint({
-    ...
-    nodeRetries: {},  // always empty
-    ...
-  }, config.logsRoot);
+  const contextUpdates: Record<string, string> = {
+    "tool.output": output,       // stdout, truncated to MAX_OUTPUT_LENGTH
+    "tool.exit_code": String(result.exitCode),
+    // tool.stderr is missing
+  };
   ```
-  In practice, if a pipeline crashes mid-execution while a node is retrying (e.g., on attempt 3 of 5), resuming from checkpoint will restart that node from attempt 1. Depending on the use case, this could cause more retries than intended or re-execute expensive operations that had already partially succeeded (retried twice). The `nodeRetries` field is validated in `loadCheckpoint` as a required field but its value is never used on resume.
-- **Recommendation:** Track per-node retry counts in the runner (e.g., `const nodeRetries = new Map<string, number>()`) and update it inside `executeWithRetry` or via the `stage_retrying` event. Persist the current counts in each checkpoint save. On resume, load the saved retry counts and pass them as the starting attempt to `executeWithRetry` for the current node. If full retry-count persistence is out of scope, at minimum document that the field is intentionally unused (e.g., rename it to `nodeRetries_reserved` or remove it from the interface).
+  When a tool command fails, the failure reason is derived from stderr (`result.stderr || \`Exit code: ${result.exitCode}\``), but this is only stored as `Outcome.failureReason`, which is not directly accessible from context in subsequent stages or conditions. A user who wants to branch based on tool error output (e.g., `context.tool_stderr=permission denied`) cannot do so. This is a gap compared to `tool.output` (stdout), which is available in context.
+- **Recommendation:** Add `"tool.stderr": result.stderr.slice(0, MAX_OUTPUT_LENGTH)` to the `contextUpdates` object so downstream stages can access and condition on tool stderr output.
 
 ---
 
-### FINDING-004: `error` events are not printed to stderr unless `--verbose` is passed
-
-- **Severity:** LOW
-- **Category:** Usability / Correctness
-- **Status:** RESOLVED
-- **File(s):** `src/cli.ts:122-134`
-- **Description:** The `onEvent` handler in `cmdRun` only prints events to stderr for a fixed set of "normal" events:
-  ```typescript
-  if (
-    verbose ||
-    event.kind === "pipeline_started" ||
-    event.kind === "pipeline_completed" ||
-    event.kind === "stage_started" ||
-    event.kind === "stage_completed" ||
-    event.kind === "human_question"
-  ) {
-    process.stderr.write(line + "\n");
-  }
-  ```
-  The `error` event kind is not in this list. As a result, when a handler throws an exception and retries are exhausted (emitting a `{ kind: "error", nodeId, message }` event), users running without `--verbose` see no output about the failure. The pipeline may silently produce a `fail` status with no visible error message, making diagnosis difficult. The only visible output would be the final `stage_completed` event with `status: "fail"` and the pipeline summary.
-- **Recommendation:** Add `event.kind === "error"` to the default-printed set (alongside `stage_completed`). Errors are exceptional and should always be surfaced to the user regardless of verbosity level.
-
----
-
-### FINDING-005: Unrecognized `join_policy` warning emitted via `process.stderr.write` instead of `config.onEvent`
-
-- **Severity:** LOW
-- **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/handlers/parallel.ts:92-95`
-- **Description:** The phase 8 spec says: "If an unrecognized join policy is encountered, treat it as `wait_all` and emit a warning via `config.onEvent`." The implementation emits the warning directly to `process.stderr`:
-  ```typescript
-  process.stderr.write(
-    `[attractor] Warning: node "${node.id}" has unrecognized join_policy "${joinPolicy}"; defaulting to "wait_all"\n`
-  );
-  ```
-  While there is no dedicated "warning" variant in `PipelineEvent`, using `process.stderr.write` bypasses the event system entirely. Callers who subscribe to `config.onEvent` to capture all runtime messages (e.g., for logging, monitoring, or testing) will miss this warning. The current test also monkeypatches `process.stderr.write` to assert this — a sign that the test is tightly coupled to the implementation detail rather than the observable interface.
-- **Recommendation:** Either (a) add a `{ kind: "warning"; message: string; nodeId?: string; timestamp: number }` variant to `PipelineEvent` and emit it via `config.onEvent?.({...})`, or (b) emit an `error`-kind event with an appropriate message. Option (a) is preferred as it gives callers a distinct category. The test should then check for an emitted event rather than patching stderr.
-
----
-
-### FINDING-006: CLI summary does not print total cost; `RunResult` has no `totalCostUsd` field
-
-- **Severity:** TRIVIAL
-- **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/cli.ts:167-172`, `src/engine/runner.ts:41-47`
-- **Description:** The phase 8 spec says `cmdRun` should "Print summary: status, completed nodes, duration, **total cost**." The current summary output only prints status, completed nodes, and duration:
-  ```typescript
-  process.stdout.write(`\nStatus: ${result.status}\n`);
-  process.stdout.write(`Completed nodes: ${result.completedNodes.join(", ")}\n`);
-  process.stdout.write(`Duration: ${durationS}s\n`);
-  ```
-  The `RunResult` interface has no `totalCostUsd` field. While individual stage costs are now propagated through `Outcome.costUsd` and `stage_completed` events (fixed in review cycle 4), the runner never aggregates them into a pipeline-level total. As a result, users cannot see how much a complete pipeline run cost without manually summing stage-level costs from logs.
-- **Recommendation:** Add `totalCostUsd: number` to the `RunResult` interface. In `runner.ts`, sum `outcome.costUsd ?? 0` for each completed node and include the total in the returned result. In `cmdRun`, print `Total cost: $X.XX` when `totalCostUsd > 0`.
-
----
-
-### FINDING-007: Unused `import * as path from "node:path"` in `runner.ts`
+### FINDING-005: Unused `sessionManager` parameter in `ParallelHandler` constructor
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:2`
-- **Description:** `import * as path from "node:path"` is declared at line 2 of `runner.ts` but `path` is never referenced anywhere in the file. The loop-restart logic uses template literals (`${config.logsRoot}-restart-${Date.now()}`), not `path.join`, and checkpoint I/O is delegated to `saveCheckpoint`/`loadCheckpoint` in `checkpoint.ts` which imports its own `path`.
-- **Recommendation:** Remove the unused import.
+- **Status:** OPEN
+- **File(s):** `src/handlers/parallel.ts:69-73`
+- **Description:** The `ParallelHandler` constructor accepts an optional `sessionManager?: SessionManager` parameter, but it is never referenced in the `execute` method or in `executeBranch`. The `cli.ts` creates `new ParallelHandler(registry)` (without a SessionManager), and the spec does not describe the parallel handler needing session management.
+- **Recommendation:** Remove the `sessionManager` parameter from the `ParallelHandler` constructor since it is dead code.
+
+---
+
+### FINDING-006: Default model in `cc-backend.ts` references `claude-sonnet-4-5-20250514` (outdated)
+
+- **Severity:** TRIVIAL
+- **Category:** Code Quality
+- **Status:** OPEN
+- **File(s):** `src/backend/cc-backend.ts:54`
+- **Description:** The default model is hardcoded as `claude-sonnet-4-5-20250514`. The current system runs on `claude-sonnet-4-6`, and the project notes specify that `claude-sonnet-4-6` is the latest Sonnet model. Users who don't specify an `llm_model` attribute will silently use an older model.
+- **Recommendation:** Update the default model to `claude-sonnet-4-6` (or the canonical latest ID, e.g., `claude-sonnet-4-6-20251015` if applicable). Alternatively, add a comment explaining why a specific pinned model is preferred over the latest.
 
 ---
 
 ## Statistics
 
-- Total findings: 7
+- Total findings: 6
 - Critical: 0
 - High: 0
-- Medium: 1
+- Medium: 0
 - Low: 4
 - Trivial: 2

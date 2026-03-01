@@ -237,7 +237,7 @@ function retryTargetExistsRule(graph: Graph): Diagnostic[] {
 }
 
 function goalGateHasRetryRule(graph: Graph): Diagnostic[] {
-  const graphHasRetry = !!graph.attributes.retryTarget;
+  const graphHasRetry = !!graph.attributes.retryTarget || !!graph.attributes.fallbackRetryTarget;
   const diags: Diagnostic[] = [];
   for (const node of graph.nodes.values()) {
     if (node.goalGate) {
