@@ -208,7 +208,14 @@ export class CodergenHandler implements Handler {
     } catch {
       // No status file or parse error — fall back to CC result
       if (ccResult.success) {
-        outcome = { status: "success" };
+        outcome = {
+          status: "success",
+          notes: `Stage completed: ${node.id}`,
+          contextUpdates: {
+            last_stage: node.id,
+            last_response: ccResult.text.slice(0, 200),
+          },
+        };
       } else {
         const failReason =
           ccResult.errors?.join("; ") || ccResult.errorSubtype || "CC execution failed";

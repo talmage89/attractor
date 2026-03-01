@@ -42,7 +42,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:209-218`
 - **Description:** When CC executes successfully but the agent did not write a `status.json` file, the implementation falls back to:
   ```typescript

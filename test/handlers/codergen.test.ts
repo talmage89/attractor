@@ -142,6 +142,9 @@ describe("CodergenHandler", () => {
     );
 
     expect(outcome.status).toBe("success");
+    expect(outcome.notes).toBe("Stage completed: work");
+    expect(outcome.contextUpdates?.["last_stage"]).toBe("work");
+    expect(outcome.contextUpdates?.["last_response"]).toBe("Done!");
   });
 
   it("returns fail on CC failure with no status.json", async () => {
