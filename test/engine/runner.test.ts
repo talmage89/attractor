@@ -446,6 +446,56 @@ describe("execution engine", () => {
     expect(checkpoint.sessionMap).toEqual({ "main-thread": "session-xyz-123" });
   });
 
+  it("sets firstNodeAfterResume=true for the first node after resume, false for subsequent", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test resume fidelity flag"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box, fidelity="full"]
+        b [shape=box, fidelity="full"]
+        s -> a -> b -> e
+      }
+    `);
+
+    const logsRoot = path.join(tmpDir, "logs");
+
+    // Save checkpoint pointing to node a (as if a hasn't run yet)
+    await fs.mkdir(logsRoot, { recursive: true });
+    await saveCheckpoint({
+      timestamp: Date.now(),
+      currentNode: "a",
+      completedNodes: [],
+      nodeOutcomes: {},
+      nodeRetries: {},
+      contextValues: { "graph.goal": "Test resume fidelity flag" },
+      sessionMap: {},
+    }, logsRoot);
+
+    // Track firstNodeAfterResume value for each executed node
+    const flagsByNode: Record<string, boolean | undefined> = {};
+    const trackingHandler: Handler = {
+      async execute(node: any, _ctx: any, _graph: any, config: any): Promise<Outcome> {
+        flagsByNode[node.id] = config.firstNodeAfterResume;
+        return { status: "success" };
+      },
+    };
+    const registry = new HandlerRegistry(trackingHandler);
+
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot,
+      interviewer: noopInterviewer,
+      resumeFromCheckpoint: path.join(logsRoot, "checkpoint.json"),
+      registry,
+    });
+
+    // First node after resume should have flag set, subsequent nodes should not
+    expect(flagsByNode["a"]).toBe(true);
+    expect(flagsByNode["b"]).toBeFalsy();
+  });
+
   it("restores sessionMap from checkpoint to SessionManager on resume", async () => {
     const graph = parse(`
       digraph G {

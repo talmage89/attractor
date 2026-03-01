@@ -29,6 +29,13 @@ export interface RunConfig {
   registry?: HandlerRegistry;
   /** Session manager for full-fidelity CC session persistence across checkpoints. */
   sessionManager?: SessionManager;
+  /**
+   * Set to true by the runner for the first node executed after a checkpoint
+   * resume. CodergenHandler uses this to degrade `full` fidelity to
+   * `summary:high` since the in-memory session state was not serialized
+   * (spec Section 10.3, step 6).
+   */
+  firstNodeAfterResume?: boolean;
 }
 
 export interface RunResult {
@@ -109,6 +116,10 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
   let currentNode: GraphNode = startNode;
 
+  // Track whether the next node to execute is the first after a resume.
+  // Passed to handlers so CodergenHandler can degrade full→summary:high fidelity.
+  let isFirstNodeAfterResume = false;
+
   if (config.resumeFromCheckpoint) {
     const checkpoint = await loadCheckpoint(config.resumeFromCheckpoint);
     completedNodes = checkpoint.completedNodes;
@@ -127,6 +138,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
     if (resumeNode) {
       currentNode = resumeNode;
     }
+    isFirstNodeAfterResume = true;
   }
 
   // Emit pipeline_started
@@ -141,6 +153,13 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
   // 3. TRAVERSAL LOOP
   loop: while (true) {
+    // Build a per-iteration config that includes the firstNodeAfterResume flag
+    // for the first node executed after a checkpoint restore.
+    const nodeConfig: RunConfig = isFirstNodeAfterResume
+      ? { ...config, firstNodeAfterResume: true }
+      : config;
+    isFirstNodeAfterResume = false;
+
     // a. CHECK TERMINAL
     if (isTerminal(currentNode)) {
       // NOTE (spec extension): The spec (Section 8.2, step a) describes running
@@ -168,7 +187,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
         currentNode,
         context,
         graph,
-        config,
+        nodeConfig,
         exitPolicy
       );
 
@@ -236,7 +255,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       currentNode,
       context,
       graph,
-      config,
+      nodeConfig,
       policy
     );
 

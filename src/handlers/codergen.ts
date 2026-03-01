@@ -128,7 +128,14 @@ export class CodergenHandler implements Handler {
     prompt = prompt.replace(/\$goal/g, goal);
 
     // 2. Resolve fidelity and session
-    const fidelity = resolveFidelity(node, graph);
+    // If this is the first node after a checkpoint resume and fidelity is "full",
+    // degrade to "summary:high". In-memory CC sessions cannot be serialized
+    // (only the sessionId is saved); resuming with full fidelity but no active
+    // session would send no context at all (spec Section 10.3, step 6).
+    let fidelity = resolveFidelity(node, graph);
+    if (config.firstNodeAfterResume && fidelity === "full") {
+      fidelity = "summary:high";
+    }
     const threadId = resolveThreadId(node, graph);
 
     let finalPrompt = prompt;

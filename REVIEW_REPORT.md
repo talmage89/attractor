@@ -132,14 +132,10 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:112-130`
 - **Description:** The spec (Section 10.3, step 6) states: "For the first node after resume, if it was using `full` fidelity, degrade to `summary:high` because in-memory CC sessions cannot be serialized." The resume logic in `runner.ts` correctly restores the session map and sets `currentNode` but does not implement fidelity degradation. In practice this may not matter (the CC SDK persists sessions to disk and `resume: sessionId` reconstructs the session), but it is a documented spec deviation. This was previously noted as deferred in review cycle 2 FINDING-001 but remains unimplemented.
-- **Recommendation:** After restoring the session manager in the resume block, track a `firstNodeAfterResume` flag:
-  ```typescript
-  let firstNodeAfterResume = true;
-  ```
-  Then in CodergenHandler (or by passing the flag via RunConfig), when `firstNodeAfterResume && fidelity === "full"`, override fidelity to `"summary:high"` for that one node call and clear the flag. Alternatively, degrade in the resume block by calling `sessionManager.clear()` and relying on preamble generation.
+- **Fix:** Added `firstNodeAfterResume?: boolean` to `RunConfig`. In `runner.ts`, after loading a checkpoint, a local `isFirstNodeAfterResume` flag is set to `true`. At the top of the traversal loop, a per-iteration `nodeConfig` is created with the flag set for the first iteration, then reset to `false`. `CodergenHandler` now checks `config.firstNodeAfterResume && fidelity === "full"` and downgrades fidelity to `"summary:high"` for that one execution. A new test in `runner.test.ts` verifies the flag is `true` for the first node after resume and falsy for subsequent nodes.
 
 ---
 
@@ -149,5 +145,5 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 - Critical: 0
 - High: 1 (RESOLVED)
 - Medium: 1 (RESOLVED)
-- Low: 5 (1 OPEN, 4 RESOLVED)
+- Low: 5 (5 RESOLVED)
 - Trivial: 0
