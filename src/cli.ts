@@ -52,7 +52,7 @@ export function formatEvent(event: PipelineEvent, startTime: number): string {
     }
     default:
       if ("kind" in event) {
-        return `${ts} [${(event as any).kind}]`;
+        return `${ts} [${(event as { kind: string }).kind}]`;
       }
       return `${ts} [event]`;
   }

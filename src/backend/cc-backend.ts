@@ -1,4 +1,4 @@
-import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 export interface CCBackendOptions {
   cwd: string;
@@ -44,7 +44,7 @@ export async function runCC(
     const permissionMode = options.permissionMode ?? "default";
     const allowDangerouslySkipPermissions = permissionMode === "bypassPermissions";
 
-    const queryOptions: Record<string, unknown> = {
+    const queryOptions: Options = {
       cwd: options.cwd,
       abortController,
       permissionMode,
@@ -64,8 +64,7 @@ export async function runCC(
       };
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const gen = query({ prompt, options: queryOptions as any });
+    const gen = query({ prompt, options: queryOptions });
 
     for await (const message of gen) {
       onEvent?.(message);

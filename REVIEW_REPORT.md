@@ -171,10 +171,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/backend/cc-backend.ts:68`, `src/cli.ts:54`
 - **Description:** Two `as any` casts: (1) `query({ prompt, options: queryOptions as any })` in cc-backend.ts bypasses the SDK's type checker for query options. (2) `(event as any).kind` in cli.ts's formatEvent default case. Both work correctly but reduce type safety.
-- **Recommendation:** For cc-backend.ts, consider defining a typed options shape or using the SDK's exported option type. For cli.ts, the union type exhaustiveness means the default branch handles unknown future event types — a typed approach would be `(event as { kind: string }).kind`.
+- **Fix:** For cc-backend.ts, imported `type Options` from the SDK and typed `queryOptions` as `Options` instead of `Record<string, unknown>`, removing the `as any` cast. For cli.ts, changed `(event as any).kind` to `(event as { kind: string }).kind`. All 237 tests pass.
 
 ---
 
@@ -185,4 +185,4 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 - High: 2 (all resolved)
 - Medium: 4 (all resolved)
 - Low: 6 (all resolved)
-- Trivial: 3 (all open)
+- Trivial: 3 (all resolved)
