@@ -4,22 +4,18 @@ import type { Graph, GraphNode, Edge } from "../model/graph.js";
 import { findStartNode, isTerminal } from "../model/graph.js";
 import type { Outcome } from "../model/outcome.js";
 import { Context } from "../model/context.js";
-import type { PipelineEvent, Question, Answer } from "../model/events.js";
+import type { PipelineEvent } from "../model/events.js";
 import { saveCheckpoint, loadCheckpoint } from "../model/checkpoint.js";
 import { HandlerRegistry } from "../handlers/registry.js";
 import type { Handler } from "../handlers/registry.js";
 import { WaitForHumanHandler } from "../handlers/wait-human.js";
+import type { Interviewer } from "../interviewer/interviewer.js";
 import { applyTransforms } from "./transforms.js";
 import { validateOrThrow } from "../validation/validator.js";
 import { selectEdge } from "./edge-selection.js";
 import { buildRetryPolicy, executeWithRetry } from "./retry.js";
 import { checkGoalGates, resolveRetryTarget } from "./goal-gates.js";
 import { resolveFidelity, resolveThreadId } from "../model/fidelity.js";
-
-export interface Interviewer {
-  ask(question: Question): Promise<Answer>;
-  inform(message: string): void;
-}
 
 export interface RunConfig {
   graph: Graph;

@@ -61,10 +61,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** MEDIUM
 - **Category:** Code Quality / Integration
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:19-22`, `src/interviewer/interviewer.ts:5-8`
 - **Description:** `runner.ts` defines its own `Interviewer` interface with `inform(message: string): void` (1 parameter). The canonical interface in `src/interviewer/interviewer.ts` has `inform(message: string, stage: string): void` (2 parameters). These are structurally compatible in the direction that matters (2-param is assignable to 1-param) but the divergence is confusing. External consumers who import `Interviewer` from `src/index.ts` get the 2-param version from `interviewer/interviewer.ts`, while the engine internally uses the 1-param version.
-- **Recommendation:** Remove the duplicate `Interviewer` interface from `runner.ts`. Import `Interviewer` from `../interviewer/interviewer.js` instead. Update `RunConfig` to use the canonical interface.
+- **Fix:** Removed the duplicate `Interviewer` interface from `runner.ts`. Added `import type { Interviewer } from "../interviewer/interviewer.js"`. Also cleaned up unused `Question` and `Answer` imports that were only needed for the old local interface definition. `RunConfig.interviewer` now uses the canonical 2-param interface. All 222 tests pass.
 
 ---
 
