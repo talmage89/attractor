@@ -49,7 +49,7 @@ The codebase is in good shape after three prior review cycles. All previous find
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/cli.ts:40-65`
 - **Description:** The phase 8 spec defines the `error` event format as `[MM:SS] ✗ message`. The `PipelineEvent` union includes `{ kind: "error"; message: string; nodeId?: string; timestamp: number }`. However, the `formatEvent` switch statement in `cli.ts` has no `case "error"` branch. The `error` event falls through to the `default` case:
   ```typescript

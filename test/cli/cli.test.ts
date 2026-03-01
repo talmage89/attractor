@@ -150,6 +150,19 @@ describe("formatEvent", () => {
     expect(result).toContain("[60:00]");
   });
 
+  it("formats error event with message", () => {
+    const event: PipelineEvent = {
+      kind: "error",
+      message: "handler crashed unexpectedly",
+      nodeId: "build",
+      timestamp: ts(15_000),
+    };
+    const result = formatEvent(event, BASE);
+    expect(result).toContain("[00:15]");
+    expect(result).toContain("✗");
+    expect(result).toContain("handler crashed unexpectedly");
+  });
+
   it("handles unknown event kind via default branch", () => {
     // Simulate a future event kind that the switch doesn't cover
     const event = {

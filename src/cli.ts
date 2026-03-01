@@ -51,6 +51,8 @@ export function formatEvent(event: PipelineEvent, startTime: number): string {
       return `${ts}   → edge "${event.label}" → ${event.to}`;
     case "human_question":
       return `${ts} [?] ${event.question.text}`;
+    case "error":
+      return `${ts} ✗ ${event.message}`;
     case "pipeline_completed": {
       const totalMs = event.durationMs;
       const mins = Math.floor(totalMs / 60000);
