@@ -132,6 +132,10 @@ The 10-step process from SPEC.md Section 9.5:
    - If `full` fidelity and an existing session exists: set `resume` option.
    - If `full` fidelity and no existing session: fresh session, will track ID.
    - Otherwise: generate preamble, prepend to prompt, fresh session.
+   - **Preamble data:** Read `completedNodes` and `nodeOutcomes` from the
+     context's `__completedNodes` and `__nodeOutcomes` keys (stored by the
+     engine before each handler call — see Phase 5). Parse them from JSON
+     and pass to `generatePreamble()`.
 
 3. **Build status instruction**: Call `buildStatusInstruction()`. Set as
    `systemPromptAppend`.
@@ -190,6 +194,13 @@ function parseEffort(value: string): "low" | "medium" | "high" {
 ### test/backend/cc-backend.test.ts
 
 These tests mock the CC SDK's `query()` function to avoid real CC invocations.
+
+> **SDK compatibility note:** The mock message structure (`type: "system"`,
+> `type: "assistant"`, `type: "result"`) should match the actual
+> `@anthropic-ai/claude-agent-sdk` package's TypeScript definitions. Before
+> writing tests, verify the mock types against the installed package's
+> exports (e.g., `SDKSystemMessage`, `SDKAssistantMessage`, `SDKResultMessage`).
+> Adjust field names if the real SDK uses different type discriminators.
 
 ```typescript
 import { describe, it, expect, vi } from "vitest";

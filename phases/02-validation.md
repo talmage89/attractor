@@ -82,8 +82,8 @@ If not → error.
 `exitNoOutgoingRule`: Find exit node. Check `outgoingEdges(graph, exitNode.id).length === 0`.
 If not → error.
 
-`reachabilityRule`: BFS from start node. Any node not in the visited set → error per node.
-Use `outgoingEdges` to traverse.
+`reachabilityRule`: Use `reachableFrom(graph, startNode.id)` from Phase 1.
+Any node not in the returned set → error per node.
 
 `edgeTargetExistsRule`: For every edge, check `graph.nodes.has(edge.from)` and
 `graph.nodes.has(edge.to)`. If not → error per missing reference.
@@ -100,8 +100,13 @@ at least one `=` or `!=`. The full parser integration happens in Phase 3.
 non-empty and contains `{` and `}`. Full integration in Phase 3.
 
 `typeKnownRule`: If `node.type` is non-empty, check against the known set:
-`["start", "exit", "codergen", "conditional", "wait.human", "parallel", "parallel.fan_in", "tool"]`.
+`["start", "exit", "codergen", "conditional", "wait.human", "parallel", "parallel.fan_in", "tool", "stack.manager_loop"]`.
 If not → warning.
+
+> **Note:** `stack.manager_loop` is included in the known set because
+> `shape=house` maps to it in the source spec. The handler is not implemented
+> (deferred per Section 1.2), but the type must be recognized as valid.
+> See Phase 5 for how the registry handles this type at runtime.
 
 `fidelityValidRule`: If `node.fidelity` is non-empty, check against:
 `["full", "truncate", "compact", "summary:low", "summary:medium", "summary:high"]`.
@@ -314,6 +319,22 @@ describe("validation", () => {
           e [shape=Msquare]
           a [type="wait.human"]
           s -> a -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "type_known");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not warn on parallel types with dots/underscores", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          a [type="parallel"]
+          b [type="parallel.fan_in"]
+          c [type="stack.manager_loop"]
+          s -> a -> b -> c -> e
         }
       `);
       const diags = validate(graph);

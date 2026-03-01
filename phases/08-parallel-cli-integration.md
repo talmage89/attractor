@@ -54,7 +54,16 @@ class ParallelHandler implements Handler {
 1. Get outgoing edges via `outgoingEdges(graph, node.id)`.
 2. If zero edges, return `{ status: "fail" }`.
 3. Read `join_policy` from `node.raw.get("join_policy") ?? "wait_all"`.
+   - Only `wait_all` and `first_success` are implemented.
+   - `k_of_n` and `quorum` (defined in the source spec) are deferred.
+   - If an unrecognized join policy is encountered, treat it as `wait_all`
+     and emit a warning via `config.onEvent`.
 4. Read `max_parallel` from `node.raw.get("max_parallel") ?? "4"`.
+
+> **Deferred features:** Error policy (`fail_fast`, `continue`, `ignore`) is
+> not implemented. All parallel executions use implicit `continue` behavior
+> (all branches run to completion and results are collected regardless of
+> individual failures).
 5. Execute branches with bounded concurrency:
    - For each branch edge, clone the context and call `executeBranch()`.
    - Use a semaphore pattern: at most `max_parallel` concurrent branches.
@@ -77,14 +86,22 @@ async function executeBranch(
 
 A simplified traversal loop that:
 1. Starts at the given node.
-2. Resolves handler, executes, records outcome.
-3. Selects next edge.
-4. Stops when: no outgoing edges, terminal node reached, or fan-in node
+2. Resolves handler via the registry, executes using `executeWithRetry`.
+3. Applies context updates to the **cloned** context within the branch.
+4. Selects next edge via `selectEdge` from Phase 5.
+5. Stops when: no outgoing edges, terminal node reached, or fan-in node
    (`parallel.fan_in` type or `tripleoctagon` shape) reached.
-5. Returns the last outcome.
+6. Returns the last outcome.
 
-This function reuses `selectEdge` from Phase 5 and handler dispatch from the
-registry. It does NOT save checkpoints (parallel branches are transient).
+**Behavior details:**
+- `executeBranch` reuses `selectEdge` and handler dispatch from the registry.
+- It DOES apply context updates to the cloned context within the branch.
+- It does NOT save checkpoints (parallel branches are transient).
+- It does NOT emit pipeline-level events (only parallel-specific events via
+  `config.onEvent` if a `parallel_branch_started`/`parallel_branch_completed`
+  event kind is defined).
+- Branches terminate at fan-in nodes, terminal nodes, or dead ends (no outgoing
+  edges). The fan-in node itself is NOT executed by the branch.
 
 ### handlers/fan-in.ts
 
@@ -111,6 +128,14 @@ import { parseArgs } from "node:util";
 
 async function main(): Promise<void>
 ```
+
+> **Unimplemented source spec attributes:** The source spec defines
+> `stack.child_dotfile`, `stack.child_workdir`, `tool_hooks.pre`, and
+> `tool_hooks.post` as graph-level attributes. These are not implemented.
+> `stack.*` attributes relate to the deferred `manager_loop` handler.
+> `tool_hooks.*` would add pre/post hook execution to the ToolHandler.
+> All unrecognized graph attributes are preserved in the `raw` map and
+> can be accessed programmatically, but have no runtime behavior.
 
 **Commands:**
 
@@ -146,6 +171,11 @@ async function main(): Promise<void>
 --resume <path>         Resume from checkpoint.json
 --auto-approve          Skip human gates
 --permission-mode <m>   CC permission mode (default: bypassPermissions)
+                        Rationale: pipeline stages are pre-authored tasks where
+                        the user has already approved the work by writing the
+                        DOT file. Prompting for each tool use would break
+                        unattended execution. Users who want safety can use
+                        --permission-mode default or --permission-mode acceptEdits.
 --verbose               Print all events to stderr
 ```
 
@@ -813,6 +843,7 @@ describe("integration: validate + run", () => {
 - [ ] ParallelHandler respects `max_parallel` concurrency limit
 - [ ] ParallelHandler `wait_all` policy: success if all pass, partial_success if any fail
 - [ ] ParallelHandler `first_success` policy: success if any branch succeeds
+- [ ] ParallelHandler treats unrecognized join policies as `wait_all` with warning
 - [ ] ParallelHandler populates `parallel.results` and count context updates
 - [ ] `executeBranch()` traverses a sub-graph until dead end or fan-in
 - [ ] FanInHandler ranks outcomes and selects the best

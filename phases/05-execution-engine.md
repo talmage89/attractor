@@ -57,7 +57,20 @@ const SHAPE_TO_TYPE: Record<string, string> = {
   component: "parallel",
   tripleoctagon: "parallel.fan_in",
   parallelogram: "tool",
+  house: "stack.manager_loop",
 };
+
+// Register a stub handler for stack.manager_loop that always fails
+// with a clear message. This type is recognized but not implemented
+// (deferred per Section 1.2).
+registry.register("stack.manager_loop", {
+  async execute(): Promise<Outcome> {
+    return {
+      status: "fail",
+      failureReason: "stack.manager_loop handler is not implemented (deferred)",
+    };
+  },
+});
 
 class HandlerRegistry {
   private handlers = new Map<string, Handler>();
@@ -83,6 +96,13 @@ function selectEdge(
 ```
 
 Implements the 5-step algorithm from SPEC.md Section 8.3.
+
+**Key clarifications:**
+
+- **Step 1 tiebreak:** When multiple edges have matching conditions, apply
+  `best_by_weight_then_lexical` to just the condition-matched set.
+- **Steps 4-5 consider ONLY edges with empty condition strings.** Conditional
+  edges that didn't match in Step 1 are excluded from weight/lexical fallback.
 
 **Label normalization** for preferred label matching: lowercase, trim,
 strip accelerator prefixes. Patterns to strip:
@@ -128,6 +148,17 @@ async function executeWithRetry(
 ```
 
 See SPEC.md Section 8.5 for the full algorithm.
+
+**Critical retry semantics:**
+
+- **FAIL outcomes are returned immediately and do NOT trigger retry.** Only
+  `"retry"` status triggers the retry loop. Only caught exceptions trigger retry.
+- **SUCCESS and PARTIAL_SUCCESS are returned immediately.**
+- **RETRY triggers a delay + retry loop** up to `maxAttempts`. If retries
+  are exhausted and `node.allowPartial` is true, return `partial_success`.
+  Otherwise return `fail` with `"max retries exceeded"`.
+- **SKIPPED is informational only** — the engine does not execute skipped nodes.
+  SKIPPED status may be set by custom handlers and is passed through as-is.
 
 ### engine/goal-gates.ts
 
@@ -195,6 +226,37 @@ The runner must:
 8. On terminal node: check goal gates.
 9. Return RunResult.
 
+**Start and exit node handling:**
+
+- The start node IS executed (its handler returns `{ status: "success" }`)
+  but is NOT added to `completedNodes`.
+- The exit node IS executed but is NOT added to `completedNodes`.
+- Only work nodes (non-start, non-exit) are recorded in `completedNodes`.
+
+**Incoming edge tracking:**
+
+- After selecting an edge in step (f), the engine stores it as `lastEdge`.
+- When executing the next node in step (b), pass `lastEdge` to
+  `resolveFidelity()` and `resolveThreadId()` so edge-level fidelity and
+  thread overrides take effect.
+
+**Engine-provided context for handlers:**
+
+- Before calling each handler, the engine stores execution state on context:
+  - `context.set("__completedNodes", JSON.stringify(completedNodes))`
+  - `context.set("__nodeOutcomes", JSON.stringify([...nodeOutcomes]))`
+- This allows `generatePreamble()` in the CodergenHandler (Phase 7) to
+  access completed nodes and outcomes without extending the Handler interface.
+- Keys prefixed with `__` are internal and excluded from user-visible snapshots.
+
+**loopRestart handling:**
+
+- `loopRestart` is deferred. If the engine encounters an edge with
+  `loopRestart === true`, it should throw:
+  `"loopRestart is not yet implemented"`.
+- Full loopRestart semantics (recursive call to `run()` with fresh logsRoot,
+  reset completedNodes, preserve context) can be added in a future phase.
+
 **Event emission**: call `config.onEvent` at each significant point
 (stage_started, stage_completed, edge_selected, checkpoint_saved, etc.).
 If `onEvent` is undefined, skip. If it throws, catch and ignore.
@@ -235,6 +297,28 @@ describe("selectEdge", () => {
 
       const edge = selectEdge(graph, gate, outcome, ctx);
       expect(edge?.to).toBe("yes");
+    });
+
+    it("tiebreaks among multiple condition matches by weight", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          a [shape=box]
+          low  [shape=box]
+          high [shape=box]
+          s -> a
+          a -> low  [condition="outcome=success", weight=1]
+          a -> high [condition="outcome=success", weight=10]
+          low -> e
+          high -> e
+        }
+      `);
+      const a = graph.nodes.get("a")!;
+      const outcome: Outcome = { status: "success" };
+      const edge = selectEdge(graph, a, outcome, new Context());
+      // Both conditions match, so highest weight wins
+      expect(edge?.to).toBe("high");
     });
 
     it("condition match beats weight", () => {
@@ -581,6 +665,72 @@ describe("execution engine", () => {
     expect(result.finalContext.get("outcome")).toBe("success");
   });
 
+  it("retries on RETRY status then succeeds", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box, max_retries=3]
+        s -> a -> e
+      }
+    `);
+
+    let callCount = 0;
+    const retryThenSuccessHandler: Handler = {
+      async execute(node: any): Promise<Outcome> {
+        callCount++;
+        if (callCount <= 2) {
+          return { status: "retry", notes: `Attempt ${callCount}` };
+        }
+        return { status: "success", notes: "Finally worked" };
+      },
+    };
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      // Inject custom handler via registry
+    });
+
+    // The handler should have been called 3 times (2 retries + 1 success)
+    expect(callCount).toBe(3);
+    expect(result.status).toBe("success");
+  });
+
+  it("FAIL does NOT trigger retry", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box, max_retries=3]
+        s -> a -> e
+      }
+    `);
+
+    let callCount = 0;
+    const failHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        callCount++;
+        return { status: "fail", failureReason: "Immediate failure" };
+      },
+    };
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      // Inject custom handler via registry
+    });
+
+    // Handler called exactly once — fail does not retry
+    expect(callCount).toBe(1);
+  });
+
   it("handles pipeline with no work nodes (start -> exit)", async () => {
     const graph = parse(`
       digraph G {
@@ -625,8 +775,15 @@ If not provided, `run()` creates the default registry with all built-in handlers
 - [ ] Engine emits events at each lifecycle point
 - [ ] Engine checks goal gates at terminal node
 - [ ] Goal gate retry target resolution works (node → graph → null)
-- [ ] Retry logic respects maxAttempts and backoff
+- [ ] Retry: FAIL returns immediately without retrying
+- [ ] Retry: RETRY triggers retry loop up to maxAttempts
+- [ ] Retry: caught exceptions trigger retry with backoff
 - [ ] Engine handles start-to-exit with no work nodes
+- [ ] Start and exit nodes are executed but NOT added to completedNodes
+- [ ] Incoming edge is tracked and passed to fidelity/thread resolution
+- [ ] Engine stores `__completedNodes` and `__nodeOutcomes` on context
+- [ ] loopRestart throws "not yet implemented" when encountered
+- [ ] `house` shape maps to `stack.manager_loop` with stub fail handler
 - [ ] Context updates propagate between nodes
 - [ ] Transforms (variable expansion, stylesheet) run before traversal
 - [ ] Validation runs before traversal and throws on errors

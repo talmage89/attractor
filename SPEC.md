@@ -843,6 +843,7 @@ const SHAPE_TO_TYPE: Record<string, string> = {
   component: "parallel",
   tripleoctagon: "parallel.fan_in",
   parallelogram: "tool",
+  house: "stack.manager_loop",  // recognized but handler is deferred (Section 1.2)
 };
 ```
 

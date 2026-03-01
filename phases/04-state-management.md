@@ -11,7 +11,6 @@ the execution engine.
 ```
 src/
   model/
-    context.ts          # Context class
     checkpoint.ts       # Checkpoint save/load
 
   backend/
@@ -23,41 +22,23 @@ src/
 
 test/
   model/
-    context.test.ts
     checkpoint.test.ts
 
   backend/
     fidelity.test.ts    # fidelity resolution + preamble generation
 ```
 
+> **Note:** `context.ts` and `context.test.ts` were moved to Phase 1 because
+> Context has no dependencies and is needed by Phase 3's condition evaluator
+> tests. The full Context class is already implemented and tested.
+
 ### Dependencies
 
-Phase 1: `Graph`, `GraphNode`, `Edge`, `Outcome`, `FidelityMode`.
+Phase 1: `Graph`, `GraphNode`, `Edge`, `Outcome`, `FidelityMode`, `Context`.
 
 ---
 
 ## Implementation Notes
-
-### model/context.ts
-
-```typescript
-class Context {
-  private values = new Map<string, unknown>();
-
-  set(key: string, value: unknown): void
-  get(key: string): unknown | undefined
-  getString(key: string, defaultValue?: string): string
-  has(key: string): boolean
-  keys(): string[]
-  snapshot(): Record<string, unknown>
-  clone(): Context
-  applyUpdates(updates: Record<string, unknown>): void
-}
-```
-
-No locking needed. Single-threaded execution. The `clone()` method creates
-a deep-enough copy for parallel branch isolation (shallow copy of the Map;
-values are strings/numbers/booleans so shallow is sufficient).
 
 ### model/checkpoint.ts
 
@@ -162,85 +143,6 @@ For `summary:low/medium/high`: narrative text at varying detail levels.
 
 ## Test Fixtures
 
-### test/model/context.test.ts
-
-```typescript
-import { describe, it, expect } from "vitest";
-import { Context } from "../../src/model/context";
-
-describe("Context", () => {
-  it("set and get", () => {
-    const ctx = new Context();
-    ctx.set("key", "value");
-    expect(ctx.get("key")).toBe("value");
-  });
-
-  it("get returns undefined for missing key", () => {
-    const ctx = new Context();
-    expect(ctx.get("missing")).toBeUndefined();
-  });
-
-  it("getString returns default for missing key", () => {
-    const ctx = new Context();
-    expect(ctx.getString("missing", "default")).toBe("default");
-  });
-
-  it("getString returns empty string by default", () => {
-    const ctx = new Context();
-    expect(ctx.getString("missing")).toBe("");
-  });
-
-  it("getString coerces non-string values", () => {
-    const ctx = new Context();
-    ctx.set("num", 42);
-    expect(ctx.getString("num")).toBe("42");
-  });
-
-  it("has checks existence", () => {
-    const ctx = new Context();
-    ctx.set("key", "value");
-    expect(ctx.has("key")).toBe(true);
-    expect(ctx.has("other")).toBe(false);
-  });
-
-  it("keys returns all keys", () => {
-    const ctx = new Context();
-    ctx.set("a", 1);
-    ctx.set("b", 2);
-    expect(ctx.keys().sort()).toEqual(["a", "b"]);
-  });
-
-  it("snapshot returns a plain object copy", () => {
-    const ctx = new Context();
-    ctx.set("a", 1);
-    ctx.set("b", "two");
-    const snap = ctx.snapshot();
-    expect(snap).toEqual({ a: 1, b: "two" });
-    // Mutation of snapshot doesn't affect context
-    snap.a = 999;
-    expect(ctx.get("a")).toBe(1);
-  });
-
-  it("clone produces an independent copy", () => {
-    const ctx = new Context();
-    ctx.set("x", "original");
-    const cloned = ctx.clone();
-    cloned.set("x", "modified");
-    cloned.set("y", "new");
-    expect(ctx.get("x")).toBe("original");
-    expect(ctx.has("y")).toBe(false);
-  });
-
-  it("applyUpdates merges key-value pairs", () => {
-    const ctx = new Context();
-    ctx.set("existing", "keep");
-    ctx.applyUpdates({ new_key: "added", existing: "overwritten" });
-    expect(ctx.get("new_key")).toBe("added");
-    expect(ctx.get("existing")).toBe("overwritten");
-  });
-});
-```
-
 ### test/model/checkpoint.test.ts
 
 ```typescript
@@ -309,6 +211,33 @@ describe("Checkpoint", () => {
     await saveCheckpoint(cp, tmpDir);
     const loaded = await loadCheckpoint(path.join(tmpDir, "checkpoint.json"));
     expect(loaded.contextValues["files_changed"]).toBe('["a.ts", "b.ts"]');
+  });
+
+  it("can be used to resume a run from a saved checkpoint", async () => {
+    // Save a checkpoint representing a partially completed run
+    const checkpoint = {
+      timestamp: Date.now(),
+      currentNode: "step2",
+      completedNodes: ["step1"],
+      nodeRetries: {},
+      contextValues: { "graph.goal": "Test resume", outcome: "success" },
+      sessionMap: {},
+    };
+    await saveCheckpoint(checkpoint, tmpDir);
+
+    // Load and verify it can restore state
+    const loaded = await loadCheckpoint(path.join(tmpDir, "checkpoint.json"));
+    expect(loaded.currentNode).toBe("step2");
+    expect(loaded.completedNodes).toEqual(["step1"]);
+    expect(loaded.contextValues["outcome"]).toBe("success");
+
+    // Restore into a Context
+    const ctx = new Context();
+    for (const [k, v] of Object.entries(loaded.contextValues)) {
+      ctx.set(k, v);
+    }
+    expect(ctx.getString("outcome")).toBe("success");
+    expect(ctx.getString("graph.goal")).toBe("Test resume");
   });
 });
 ```
@@ -466,11 +395,10 @@ describe("generatePreamble", () => {
 
 ## Completion Criteria
 
-- [ ] Context: set/get/getString/has/keys/snapshot/clone/applyUpdates all work
-- [ ] Context clone is independent (mutations don't propagate)
 - [ ] Checkpoint saves to and loads from JSON file
 - [ ] Checkpoint round-trips without data loss
 - [ ] Checkpoint throws on missing file or malformed JSON
+- [ ] Checkpoint can be loaded and used to restore Context state (resume flow)
 - [ ] SessionManager stores and retrieves session IDs by thread ID
 - [ ] SessionManager snapshot/restore round-trips
 - [ ] Fidelity resolution follows precedence: edge > node > graph > "compact"

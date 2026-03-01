@@ -32,9 +32,18 @@ test/
     transforms.test.ts
 ```
 
+### Files to Update
+
+```
+src/
+  validation/
+    rules.ts            # Update conditionSyntaxRule and stylesheetSyntaxRule
+                        # to use the real parsers, replacing the Phase 2 stubs
+```
+
 ### Dependencies
 
-Phase 1: `Graph`, `GraphNode`, `Outcome`, graph query helpers.
+Phase 1: `Graph`, `GraphNode`, `Outcome`, `Context`, graph query helpers.
 
 ---
 
@@ -116,9 +125,13 @@ Parse rules left-to-right:
    - Property must be one of: `llm_model`, `llm_provider`, `reasoning_effort`.
    - Value is everything until `;` or `}`, trimmed.
    - Semicolons between declarations are required. Trailing semicolon optional.
+   - **Unrecognized property names are silently ignored** (not added to the
+     declarations map). No error is thrown. This matches the source spec's
+     "ignored with a warning" behavior — warnings can optionally be logged
+     but the parse must succeed.
 5. Return collected rules.
 
-On malformed input, throw with position context.
+On malformed input (missing `{`, unterminated block), throw with position context.
 
 ### stylesheet/applicator.ts
 
@@ -507,7 +520,9 @@ describe("transforms", () => {
 - [ ] Explicit node attributes override stylesheet
 - [ ] `applyTransforms()` runs variable expansion and stylesheet in order
 - [ ] `$goal` expansion works, no-op when absent
-- [ ] Phase 2 validation rules for conditions/stylesheet can now use real parsers
-  (update `conditionSyntaxRule` and `stylesheetSyntaxRule` to use the parsers)
+- [ ] Update `conditionSyntaxRule` in `src/validation/rules.ts` to call
+  `parseCondition()` and report parse errors as diagnostics (replacing Phase 2 stub)
+- [ ] Update `stylesheetSyntaxRule` in `src/validation/rules.ts` to call
+  `parseStylesheet()` and report parse errors as diagnostics (replacing Phase 2 stub)
 - [ ] All Phase 1 and 2 tests still pass
 - [ ] All tests pass: `npx vitest run`

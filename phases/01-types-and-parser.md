@@ -14,6 +14,7 @@ src/
     outcome.ts        # Outcome, StageStatus
     events.ts         # PipelineEvent union type (types only, no emitter logic)
     fidelity.ts       # FidelityMode type literal
+    context.ts        # Context class (no dependencies, needed by Phase 3+)
   parser/
     tokens.ts         # TokenKind, Token
     lexer.ts          # lex(source) → Token[]
@@ -24,6 +25,8 @@ test/
     lexer.test.ts
     parser.test.ts
     fixtures.ts       # Shared DOT strings for tests
+  model/
+    context.test.ts
 ```
 
 ### Dependencies
@@ -100,7 +103,12 @@ function incomingEdges(graph: Graph, nodeId: string): Edge[]
 function findStartNode(graph: Graph): GraphNode | null
 function findExitNode(graph: Graph): GraphNode | null
 function isTerminal(node: GraphNode): boolean
+function reachableFrom(graph: Graph, nodeId: string): Set<string>
 ```
+
+`reachableFrom`: BFS/DFS from the given node, returning a `Set<string>` of all
+reachable node IDs (not including the start node itself unless it's reachable
+via a cycle). Phase 2's `reachabilityRule` uses this instead of inline BFS.
 
 `findStartNode`: returns the node with `shape === "Mdiamond"`. If none,
 check for `id === "start"` or `id === "Start"`. Return null if neither found.
@@ -109,6 +117,35 @@ check for `id === "start"` or `id === "Start"`. Return null if neither found.
 check for `id === "exit"` or `id === "end"`. Return null if neither found.
 
 `isTerminal`: `shape === "Msquare"` or `type === "exit"`.
+
+### model/context.ts
+
+Context is placed in Phase 1 because it has no dependencies and is needed by
+Phase 3's condition evaluator tests.
+
+```typescript
+class Context {
+  private values = new Map<string, unknown>();
+
+  set(key: string, value: unknown): void
+  get(key: string): unknown | undefined
+  getString(key: string, defaultValue?: string): string
+  has(key: string): boolean
+  keys(): string[]
+  snapshot(): Record<string, unknown>
+  clone(): Context
+  applyUpdates(updates: Record<string, unknown>): void
+}
+```
+
+No locking needed. Single-threaded execution. The `clone()` method creates
+a deep-enough copy for parallel branch isolation (shallow copy of the Map;
+values are strings/numbers/booleans so shallow is sufficient).
+
+> **Divergence note:** `has()` and `keys()` are convenience additions not in the
+> source spec. The source spec's `append_log(entry)` is deferred — no phase
+> implements it. If any source spec behavior depends on `append_log`, it will
+> need to be added later.
 
 ### model/outcome.ts
 
@@ -172,7 +209,14 @@ Export: `function lex(source: string): Token[]`
    - `"..."` → STRING (handle escape sequences: `\"`, `\\`, `\n`, `\t`)
    - Numeric: optional `-`, digits, optional `.` + digits, optional duration
      suffix (`ms`, `s`, `m`, `h`, `d`). Produce INTEGER, FLOAT, or DURATION.
-   - Identifier/keyword: `[A-Za-z_][A-Za-z0-9_]*`. Check against keyword map.
+   - Identifier/keyword: `[A-Za-z_][A-Za-z0-9_.]*`. Check against keyword map.
+
+> **Simplification:** The source spec BNF treats dots as separators in
+> `QualifiedId`, not part of `Identifier`. We allow dots in identifiers at
+> the lexer level because node IDs never contain dots in practice, and
+> qualified keys (like `human.default_choice`) always appear in attribute
+> contexts. This avoids needing a separate `QualifiedId` parser production
+> and is functionally equivalent.
 
 On unrecognized character, throw: `Unexpected character '${char}' at line ${line}, column ${col}`.
 
@@ -232,6 +276,12 @@ LBRACKET (key EQUALS value COMMA?)* RBRACKET
 ```
 
 Keys can be qualified: `human.default_choice` is a single key string "human.default_choice".
+
+**Duration conversion for `timeout`:** When assigning `timeout` to a GraphNode,
+convert duration strings to milliseconds: `ms`=1, `s`=1000, `m`=60000,
+`h`=3600000, `d`=86400000. Duration strings may appear as bare duration tokens
+(`900s`) or quoted strings (`"900s"`). Both must be converted to milliseconds
+when assigned to `timeout`.
 Values are typed by token kind:
 - STRING → strip quotes, process escapes
 - INTEGER → string representation
@@ -721,30 +771,40 @@ describe("parser", () => {
   });
 
   describe("graph query helpers", () => {
-    it("outgoingEdges returns correct edges", () => {
+    it("outgoingEdges returns correct edges", async () => {
       const { outgoingEdges } = await import("../../src/model/graph");
       const graph = parse(fixtures.BRANCHING);
       const gateEdges = outgoingEdges(graph, "gate");
       expect(gateEdges).toHaveLength(2);
     });
 
-    it("findStartNode finds Mdiamond", () => {
+    it("findStartNode finds Mdiamond", async () => {
       const { findStartNode } = await import("../../src/model/graph");
       const graph = parse(fixtures.MINIMAL_LINEAR);
       expect(findStartNode(graph)?.id).toBe("start");
     });
 
-    it("findExitNode finds Msquare", () => {
+    it("findExitNode finds Msquare", async () => {
       const { findExitNode } = await import("../../src/model/graph");
       const graph = parse(fixtures.MINIMAL_LINEAR);
       expect(findExitNode(graph)?.id).toBe("exit");
     });
 
-    it("isTerminal identifies exit nodes", () => {
+    it("isTerminal identifies exit nodes", async () => {
       const { isTerminal } = await import("../../src/model/graph");
       const graph = parse(fixtures.MINIMAL_LINEAR);
       expect(isTerminal(graph.nodes.get("exit")!)).toBe(true);
       expect(isTerminal(graph.nodes.get("start")!)).toBe(false);
+    });
+
+    it("reachableFrom returns all reachable nodes", async () => {
+      const { reachableFrom } = await import("../../src/model/graph");
+      const graph = parse(fixtures.BRANCHING);
+      const reachable = reachableFrom(graph, "start");
+      expect(reachable.has("plan")).toBe(true);
+      expect(reachable.has("implement")).toBe(true);
+      expect(reachable.has("gate")).toBe(true);
+      expect(reachable.has("exit")).toBe(true);
     });
   });
 
@@ -788,6 +848,86 @@ describe("parser", () => {
 
 ---
 
+### test/model/context.test.ts
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { Context } from "../../src/model/context";
+
+describe("Context", () => {
+  it("set and get", () => {
+    const ctx = new Context();
+    ctx.set("key", "value");
+    expect(ctx.get("key")).toBe("value");
+  });
+
+  it("get returns undefined for missing key", () => {
+    const ctx = new Context();
+    expect(ctx.get("missing")).toBeUndefined();
+  });
+
+  it("getString returns default for missing key", () => {
+    const ctx = new Context();
+    expect(ctx.getString("missing", "default")).toBe("default");
+  });
+
+  it("getString returns empty string by default", () => {
+    const ctx = new Context();
+    expect(ctx.getString("missing")).toBe("");
+  });
+
+  it("getString coerces non-string values", () => {
+    const ctx = new Context();
+    ctx.set("num", 42);
+    expect(ctx.getString("num")).toBe("42");
+  });
+
+  it("has checks existence", () => {
+    const ctx = new Context();
+    ctx.set("key", "value");
+    expect(ctx.has("key")).toBe(true);
+    expect(ctx.has("other")).toBe(false);
+  });
+
+  it("keys returns all keys", () => {
+    const ctx = new Context();
+    ctx.set("a", 1);
+    ctx.set("b", 2);
+    expect(ctx.keys().sort()).toEqual(["a", "b"]);
+  });
+
+  it("snapshot returns a plain object copy", () => {
+    const ctx = new Context();
+    ctx.set("a", 1);
+    ctx.set("b", "two");
+    const snap = ctx.snapshot();
+    expect(snap).toEqual({ a: 1, b: "two" });
+    snap.a = 999;
+    expect(ctx.get("a")).toBe(1);
+  });
+
+  it("clone produces an independent copy", () => {
+    const ctx = new Context();
+    ctx.set("x", "original");
+    const cloned = ctx.clone();
+    cloned.set("x", "modified");
+    cloned.set("y", "new");
+    expect(ctx.get("x")).toBe("original");
+    expect(ctx.has("y")).toBe(false);
+  });
+
+  it("applyUpdates merges key-value pairs", () => {
+    const ctx = new Context();
+    ctx.set("existing", "keep");
+    ctx.applyUpdates({ new_key: "added", existing: "overwritten" });
+    expect(ctx.get("new_key")).toBe("added");
+    expect(ctx.get("existing")).toBe("overwritten");
+  });
+});
+```
+
+---
+
 ## Completion Criteria
 
 - [ ] `lex()` tokenizes all fixtures without error
@@ -799,5 +939,8 @@ describe("parser", () => {
 - [ ] Subgraph defaults and class derivation work
 - [ ] Comments are stripped
 - [ ] Implicit nodes are created from edge references
-- [ ] Duration strings are converted to milliseconds
-- [ ] All tests pass: `npx vitest run test/parser/`
+- [ ] Duration strings are converted to milliseconds (both bare `900s` and quoted `"900s"`)
+- [ ] `reachableFrom()` returns all nodes reachable via BFS from a given node
+- [ ] Context: set/get/getString/has/keys/snapshot/clone/applyUpdates all work
+- [ ] Context clone is independent (mutations don't propagate)
+- [ ] All tests pass: `npx vitest run test/parser/ test/model/`
