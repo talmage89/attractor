@@ -16,7 +16,7 @@ The codebase continues to be in excellent shape after eight prior review cycles.
 
 - **Severity:** MEDIUM
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/parser/parser.ts:10-26`
 - **Description:** `parseDurationToMs` iterates `Object.entries(DURATION_MS)` and returns on the first matching `.endsWith(suffix)`. Because `"250ms".endsWith("s")` is `true` (the `"s"` entry would also match), the function's correctness depends on `"ms"` being iterated before `"s"`. In V8, non-integer string keys are iterated in insertion order, and `"ms"` appears first in the literal, so this works today. However, the logic is fragile: reordering the `DURATION_MS` object (e.g., alphabetically) or running on a non-V8 engine would cause durations like `"250ms"` to silently return `250000` instead of `250`.
 - **Recommendation:** Sort entries by suffix length descending before iterating, so longer suffixes are always checked first:

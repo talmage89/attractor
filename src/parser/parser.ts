@@ -16,7 +16,9 @@ const DURATION_MS: Record<string, number> = {
 };
 
 function parseDurationToMs(value: string): number {
-  for (const [suffix, multiplier] of Object.entries(DURATION_MS)) {
+  for (const [suffix, multiplier] of Object.entries(DURATION_MS).sort(
+    (a, b) => b[0].length - a[0].length
+  )) {
     if (value.endsWith(suffix)) {
       const num = parseFloat(value.slice(0, -suffix.length));
       return num * multiplier;
