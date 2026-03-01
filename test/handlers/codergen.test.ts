@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { parseStatusFile } from "../../src/handlers/codergen.js";
+import { parseStatusFile, buildStatusInstruction } from "../../src/handlers/codergen.js";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -482,8 +482,93 @@ describe("CodergenHandler", () => {
 });
 
 describe("buildStatusInstruction", () => {
+  function makeNode(id: string): import("../../src/model/graph.js").GraphNode {
+    return {
+      id,
+      label: id,
+      shape: "box",
+      type: "",
+      prompt: "",
+      maxRetries: 0,
+      goalGate: false,
+      retryTarget: "",
+      fallbackRetryTarget: "",
+      fidelity: "",
+      threadId: "",
+      className: "",
+      timeout: null,
+      llmModel: "",
+      llmProvider: "",
+      reasoningEffort: "",
+      autoStatus: false,
+      allowPartial: false,
+      raw: new Map(),
+    };
+  }
+
+  function makeGraph(edges: import("../../src/model/graph.js").Edge[]): import("../../src/model/graph.js").Graph {
+    return {
+      name: "G",
+      attributes: {
+        goal: "",
+        label: "",
+        modelStylesheet: "",
+        defaultMaxRetry: 0,
+        retryTarget: "",
+        fallbackRetryTarget: "",
+        defaultFidelity: "",
+        raw: new Map(),
+      },
+      nodes: new Map(),
+      edges,
+    };
+  }
+
+  function makeEdge(from: string, to: string, label: string): import("../../src/model/graph.js").Edge {
+    return { from, to, label, condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false };
+  }
+
   it("includes the status file path", () => {
-    // Implicitly tested via the systemPromptAppend tests above
+    const node = makeNode("work");
+    const graph = makeGraph([]);
+    const result = buildStatusInstruction("/tmp/logs/work/status.json", node, graph);
+    expect(result).toContain("/tmp/logs/work/status.json");
+  });
+
+  it("includes 'Do NOT skip writing this file' text", () => {
+    const node = makeNode("work");
+    const graph = makeGraph([]);
+    const result = buildStatusInstruction("/tmp/status.json", node, graph);
+    expect(result).toContain("Do NOT skip writing this file");
+  });
+
+  it("enumerates outgoing edge labels when they exist", () => {
+    const node = makeNode("work");
+    const graph = makeGraph([
+      makeEdge("work", "next", "Done"),
+      makeEdge("work", "fix", "Fix issues"),
+    ]);
+    const result = buildStatusInstruction("/tmp/status.json", node, graph);
+    expect(result).toContain('"Done"');
+    expect(result).toContain('"Fix issues"');
+    expect(result).toContain("preferred_next_label");
+  });
+
+  it("omits preferred_next_label hint when no outgoing edges with labels", () => {
+    const node = makeNode("work");
+    const graph = makeGraph([
+      makeEdge("work", "next", ""), // unlabelled edge
+    ]);
+    const result = buildStatusInstruction("/tmp/status.json", node, graph);
+    // Only labelled edges should appear in the hint; empty-label edges are filtered
+    expect(result).not.toContain("can be one of");
+  });
+
+  it("omits preferred_next_label hint when node has no outgoing edges", () => {
+    const node = makeNode("exit");
+    const graph = makeGraph([]);
+    const result = buildStatusInstruction("/tmp/status.json", node, graph);
+    expect(result).not.toContain("can be one of");
   });
 });
 

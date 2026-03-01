@@ -136,7 +136,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** LOW
 - **Category:** Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `test/handlers/codergen.test.ts` (buildStatusInstruction describe block)
 - **Description:** The `describe('buildStatusInstruction')` block contains a single `it()` with an empty body:
   ```typescript
@@ -149,6 +149,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
   Vitest marks empty test bodies as passed. The function builds multi-line instructions with edge label enumeration — core LLM guidance for the pipeline. The edge-labels listing, status file path, and instruction text are not explicitly verified in isolation.
 
 - **Recommendation:** Replace the empty body with real assertions calling `buildStatusInstruction` directly. Cover: path present in output, edge labels enumerated when edges exist, correct format when no outgoing edges, presence of the `'Do NOT skip writing this file'` text.
+- **Resolution:** Replaced the single empty test body with 5 direct unit tests: (1) status file path in output, (2) "Do NOT skip writing this file" text present, (3) edge labels enumerated when edges have labels, (4) "can be one of" hint omitted when all edges are unlabelled, (5) hint omitted when node has no outgoing edges. Also imported `buildStatusInstruction` into the test file. 302 tests passing.
 
 ---
 
