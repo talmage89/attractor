@@ -416,6 +416,32 @@ describe("execution engine", () => {
     expect(result.completedNodes).toHaveLength(0);
   });
 
+  it("excludes start node named 'start' (no Mdiamond shape) from completedNodes", async () => {
+    // A node with id="start" is a valid start node per findStartNode, but has
+    // no shape=Mdiamond and no type=start attribute. The old isStartNode check
+    // missed this case and would include it in completedNodes.
+    const graph = parse(`
+      digraph G {
+        graph [goal="Named start test"]
+        start
+        end [shape=Msquare]
+        a [shape=box]
+        start -> a -> end
+      }
+    `);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+    });
+
+    expect(result.status).toBe("success");
+    expect(result.completedNodes).not.toContain("start");
+    expect(result.completedNodes).toContain("a");
+  });
+
   it("saves sessionMap from SessionManager into checkpoint", async () => {
     const graph = parse(`
       digraph G {

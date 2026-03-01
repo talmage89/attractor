@@ -307,7 +307,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
     }
 
     // b. EXECUTE NODE (non-terminal)
-    const isStartNode = currentNode.shape === "Mdiamond" || currentNode.type === "start";
+    const isStartNode = currentNode.id === startNode.id;
     const nodeStart = Date.now();
 
     emit(config, {

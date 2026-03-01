@@ -103,7 +103,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
 
 - **Severity:** LOW
 - **Category:** Correctness / Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:300`, `src/model/graph.ts:60-67`
 - **Description:** The runner excludes the start node from `completedNodes` and `nodeOutcomes` via this check:
   ```typescript
@@ -127,6 +127,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
   const isStartNode = currentNode.id === startNode.id;
   ```
   Or add `id === "start" || id === "Start"` to the `isStartNode` check to match `findStartNode`'s fallback logic.
+- **Resolution:** Changed the `isStartNode` check on runner.ts:310 from the shape/type heuristic to `currentNode.id === startNode.id`, which delegates to the already-computed `startNode` reference. Added a test verifying that a start node named `"start"` (no `shape=Mdiamond`, no `type` attribute) is excluded from `completedNodes`.
 
 ---
 
