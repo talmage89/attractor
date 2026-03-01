@@ -78,7 +78,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:261-296`
 - **Description:** The terminal branch of the traversal loop executes the exit handler (an intentional spec extension documented in the code), then checks goal gates. However, `finalStatus` is only set to `"fail"` if a goal gate is unsatisfied or the goal gate retry limit is exceeded. If the exit handler returns `{ status: "fail" }`, the outcome is ignored with respect to `finalStatus`, and the pipeline reports `"success"` as long as goal gates are satisfied.
 
@@ -95,6 +95,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
   }
   ```
   Alternatively, document explicitly (in a JSDoc comment on `run()` or in the code) that exit handler failures are intentionally ignored when goal gates pass.
+- **Resolution:** After the goal-gate check block in the terminal branch, added `if (exitOutcome.status === "fail") { finalStatus = "fail"; }` before `break loop`. Added a test verifying that a custom exit handler returning `fail` causes `RunResult.status` to be `"fail"` even when all goal gates pass.
 
 ---
 

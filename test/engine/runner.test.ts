@@ -704,6 +704,39 @@ describe("execution engine", () => {
     expect(callLog).toContain("custom-exit");
   });
 
+  it("exit handler failure propagates to RunResult.status when goal gates pass", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test exit fail"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a -> e
+      }
+    `);
+
+    const exitFailHandler: Handler = {
+      async execute(node: any): Promise<Outcome> {
+        // Custom exit handler that signals failure
+        if (node.shape === "Msquare") return { status: "fail", failureReason: "exit failed" };
+        return { status: "success" };
+      },
+    };
+    const registry = new HandlerRegistry({ async execute(): Promise<Outcome> { return { status: "success" }; } });
+    registry.register("exit", exitFailHandler);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    // Exit handler returned fail — pipeline should reflect that failure
+    expect(result.status).toBe("fail");
+  });
+
   it("goal-gate retry loop is bounded by default_max_retry", async () => {
     // Pipeline: start -> work -> exit; work has goal_gate=true and always fails;
     // exit has retry_target pointing back to work. With default_max_retry=2 the

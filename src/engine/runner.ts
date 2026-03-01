@@ -299,7 +299,10 @@ export async function run(config: RunConfig): Promise<RunResult> {
         }
       }
 
-      // Satisfied or no goal gates
+      // Goal gates satisfied (or no goal gates): propagate exit handler failure
+      if (exitOutcome.status === "fail") {
+        finalStatus = "fail";
+      }
       break loop;
     }
 
