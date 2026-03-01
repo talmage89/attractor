@@ -10,6 +10,10 @@ import { applyTransforms } from "./engine/transforms.js";
 import { run } from "./engine/runner.js";
 import { HandlerRegistry } from "./handlers/registry.js";
 import { CodergenHandler } from "./handlers/codergen.js";
+import { ToolHandler } from "./handlers/tool.js";
+import { ParallelHandler } from "./handlers/parallel.js";
+import { FanInHandler } from "./handlers/fan-in.js";
+import { ConditionalHandler } from "./handlers/conditional.js";
 import { SessionManager } from "./backend/session-manager.js";
 import { AutoApproveInterviewer } from "./interviewer/auto-approve.js";
 import { ConsoleInterviewer } from "./interviewer/console.js";
@@ -135,6 +139,10 @@ async function cmdRun(args: string[]): Promise<void> {
     async execute() { return { status: "success" }; },
   });
   registry.register("codergen", new CodergenHandler(sessionManager));
+  registry.register("tool", new ToolHandler());
+  registry.register("parallel", new ParallelHandler(registry));
+  registry.register("parallel.fan_in", new FanInHandler());
+  registry.register("conditional", new ConditionalHandler());
 
   let result;
   try {

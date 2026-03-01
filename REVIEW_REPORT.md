@@ -16,7 +16,7 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 
 - **Severity:** HIGH
 - **Category:** Spec Compliance / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/cli.ts:134-137`
 - **Description:** The CLI creates a `HandlerRegistry` and only calls `registry.register("codergen", new CodergenHandler(sessionManager))`. The `ToolHandler`, `ParallelHandler`, and `FanInHandler` classes exist and are correct but are never instantiated or registered anywhere in the CLI. When the execution engine resolves a handler for a `tool` node (shape `parallelogram`) or `parallel` node (shape `component`), it falls through to the default mock handler which returns `{ status: "success" }` without executing anything. Effect: (a) Tool pipelines silently skip all shell command execution and report success; (b) Parallel pipelines never fan out — they return success without executing any branches. A user who builds a pipeline with `tool` or `parallel` nodes and runs `attractor run` will get incorrect results with no warning. The `FanInHandler` is also unregistered; since parallel never ran, fan-in also gets no meaningful results.
 - **Recommendation:** In `cmdRun` in `cli.ts`, after creating the registry, also register the missing handlers:
@@ -147,7 +147,7 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 
 - Total findings: 7
 - Critical: 0
-- High: 1 (OPEN)
+- High: 1 (RESOLVED)
 - Medium: 1 (OPEN)
 - Low: 5 (OPEN)
 - Trivial: 0
