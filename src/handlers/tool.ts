@@ -91,11 +91,15 @@ export class ToolHandler implements Handler {
     if (result.exitCode === 0 && !result.timedOut) {
       return { status: "success", contextUpdates };
     } else {
+      // Truncate failureReason to the first line of stderr (max 200 chars) so
+      // that large multi-line compiler/test output does not pollute pipeline
+      // events and checkpoints. Full stderr is preserved in contextUpdates.
+      const stderrFirstLine = result.stderr.split("\n")[0].slice(0, 200);
       return {
         status: "fail",
         failureReason: result.timedOut
           ? "Command timed out"
-          : result.stderr || `Exit code: ${result.exitCode}`,
+          : stderrFirstLine || `Exit code: ${result.exitCode}`,
         contextUpdates,
       };
     }

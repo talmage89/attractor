@@ -7,6 +7,8 @@ import type { PipelineEvent } from "../model/events.js";
 import { saveCheckpoint, loadCheckpoint } from "../model/checkpoint.js";
 import { HandlerRegistry, SHAPE_TO_TYPE } from "../handlers/registry.js";
 import type { Handler } from "../handlers/registry.js";
+import { StartHandler } from "../handlers/start.js";
+import { ExitHandler } from "../handlers/exit.js";
 import { WaitForHumanHandler } from "../handlers/wait-human.js";
 import type { Interviewer } from "../interviewer/interviewer.js";
 import { SessionManager } from "../backend/session-manager.js";
@@ -102,10 +104,10 @@ export async function run(config: RunConfig): Promise<RunResult> {
   // Register built-in handlers only if the caller has not already registered one.
   // This preserves the caller's custom start/exit/wait.human handlers when provided.
   if (!registry.hasHandler("start")) {
-    registry.register("start", { async execute(): Promise<Outcome> { return { status: "success" }; } });
+    registry.register("start", new StartHandler());
   }
   if (!registry.hasHandler("exit")) {
-    registry.register("exit", { async execute(): Promise<Outcome> { return { status: "success" }; } });
+    registry.register("exit", new ExitHandler());
   }
   if (!registry.hasHandler("wait.human")) {
     registry.register("wait.human", new WaitForHumanHandler(config.interviewer));
