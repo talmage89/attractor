@@ -92,6 +92,25 @@ describe("ToolHandler", () => {
     // If python3 is not available, skip gracefully — the test validates truncation
   });
 
+  it("captures stderr in context updates on success", async () => {
+    const handler = new ToolHandler();
+    // Command writes to stderr and stdout, exits 0
+    const node = makeToolNode({ tool_command: "echo 'err output' >&2 && echo 'stdout output'" });
+    const outcome = await handler.execute(node, new Context(), {} as any, config(tmpDir) as any);
+    expect(outcome.status).toBe("success");
+    expect(outcome.contextUpdates?.["tool.stderr"]).toContain("err output");
+    expect(outcome.contextUpdates?.["tool.output"]).toContain("stdout output");
+  });
+
+  it("captures stderr in context updates on failure", async () => {
+    const handler = new ToolHandler();
+    // Command writes to stderr and exits nonzero
+    const node = makeToolNode({ tool_command: "echo 'failure details' >&2; exit 2" });
+    const outcome = await handler.execute(node, new Context(), {} as any, config(tmpDir) as any);
+    expect(outcome.status).toBe("fail");
+    expect(outcome.contextUpdates?.["tool.stderr"]).toContain("failure details");
+  });
+
   it("uses custom timeout from node", async () => {
     const handler = new ToolHandler();
     // A command that would take longer than the timeout

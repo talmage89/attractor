@@ -140,13 +140,15 @@ This is the fourteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** LOW
 - **Category:** Test Quality
-- **Status:** OPEN
-- **File(s):** `src/handlers/tool.ts:88`, `test/handlers/tool.test.ts`
+- **Status:** RESOLVED
+- **File(s):** `src/handlers/tool.ts:88`, `test/handlers/tool-handler.test.ts`
 - **Description:** `ToolHandler.execute()` sets `contextUpdates['tool.stderr']` at `tool.ts:88` alongside `tool.output` and `tool.exit_code`. There is no test in `test/handlers/tool.test.ts` or any other test file that asserts `contextUpdates['tool.stderr']` is set. A search for `tool.stderr` and `tool_stderr` across the entire test directory returns no matches.
 
   If the `'tool.stderr'` key were accidentally renamed or removed, no test would catch the regression.
 
 - **Recommendation:** Add a test case in `tool.test.ts` that runs a command which writes to stderr and asserts that `contextUpdates['tool.stderr']` is present with the expected content. An already-failing command test is the natural place for this, since stderr is captured in both success and failure cases.
+
+- **Resolution:** Added two tests to `test/handlers/tool-handler.test.ts`: one verifying `tool.stderr` is set on success (command writes to stderr, exits 0) and one on failure (command writes to stderr, exits nonzero). 320 tests passing.
 
 ---
 
