@@ -1,6 +1,50 @@
 import { describe, it, expect } from "vitest";
 import { parse } from "../../src/parser/parser.js";
 import { validate, validateOrThrow } from "../../src/validation/validator.js";
+import type { Graph, GraphNode, Edge } from "../../src/model/graph.js";
+
+function makeNode(id: string, overrides: Partial<GraphNode> = {}): GraphNode {
+  return {
+    id,
+    label: id,
+    shape: "box",
+    type: "",
+    prompt: "Do work",
+    maxRetries: 0,
+    goalGate: false,
+    retryTarget: "",
+    fallbackRetryTarget: "",
+    fidelity: "",
+    threadId: "",
+    className: "",
+    timeout: null,
+    llmModel: "",
+    llmProvider: "",
+    reasoningEffort: "",
+    autoStatus: false,
+    allowPartial: false,
+    raw: new Map(),
+    ...overrides,
+  };
+}
+
+function makeGraph(nodeList: GraphNode[], edgeList: Edge[] = []): Graph {
+  return {
+    name: "G",
+    attributes: {
+      goal: "Test",
+      label: "",
+      modelStylesheet: "",
+      defaultMaxRetry: 0,
+      retryTarget: "",
+      fallbackRetryTarget: "",
+      defaultFidelity: "",
+      raw: new Map(),
+    },
+    nodes: new Map(nodeList.map((n) => [n.id, n])),
+    edges: edgeList,
+  };
+}
 
 describe("validation", () => {
   describe("startNodeRule", () => {
@@ -335,6 +379,66 @@ describe("validation", () => {
       `);
       const diags = validate(graph);
       const rule = diags.filter(d => d.rule === "prompt_on_llm_nodes");
+      expect(rule).toHaveLength(0);
+    });
+  });
+
+  describe("nodeIdSafeRule", () => {
+    it("errors on node id containing path traversal with '..'", () => {
+      // Build graph directly — parser doesn't accept quoted strings in edge positions
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("../../evil", { prompt: "Escape" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "../../evil", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "../../evil", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "node_id_safe" && d.severity === "error");
+      expect(rule.length).toBeGreaterThan(0);
+      expect(rule[0].message).toContain("../../evil");
+    });
+
+    it("errors on node id containing a forward slash", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a/b", { prompt: "Slash" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "a/b", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a/b", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "node_id_safe" && d.severity === "error");
+      expect(rule.length).toBeGreaterThan(0);
+    });
+
+    it("errors on node id that is '..'", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("..", { prompt: "Parent dir" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "..", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "..", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "node_id_safe" && d.severity === "error");
+      expect(rule.length).toBeGreaterThan(0);
+    });
+
+    it("does not error on normal node ids", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          my_node_1 [shape=box, prompt="Normal"]
+          s -> my_node_1 -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "node_id_safe");
       expect(rule).toHaveLength(0);
     });
   });

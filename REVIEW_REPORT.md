@@ -68,7 +68,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** MEDIUM
 - **Category:** Security
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:168-173`
 - **Description:** The stage directory is constructed as `path.join(config.logsRoot, node.id)`. If a DOT file declares a node with a quoted string id containing `..` path segments (e.g., `"../../etc/cron.d"`), `path.join` resolves the traversal, and `prompt.md`, `response.md`, and `status.json` are written outside the intended logs directory. The DOT parser's `IDENTIFIER` token (`[A-Za-z0-9_.]`) does not allow `/`, but quoted string identifiers can contain arbitrary characters.
 

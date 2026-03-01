@@ -407,6 +407,53 @@ describe("CodergenHandler", () => {
     expect(sessionManager.getSessionId("step1")).toBe("session-step1-thread");
   });
 
+  it("throws when node id would escape logsRoot via path traversal", async () => {
+    // Build graph directly — the parser does not accept quoted string ids in edge positions
+    const evilNode: import("../../src/model/graph.js").GraphNode = {
+      id: "../../evil",
+      label: "Escape",
+      shape: "box",
+      type: "",
+      prompt: "Escape to parent",
+      maxRetries: 0,
+      goalGate: false,
+      retryTarget: "",
+      fallbackRetryTarget: "",
+      fidelity: "",
+      threadId: "",
+      className: "",
+      timeout: null,
+      llmModel: "",
+      llmProvider: "",
+      reasoningEffort: "",
+      autoStatus: false,
+      allowPartial: false,
+      raw: new Map(),
+    };
+    const graph: import("../../src/model/graph.js").Graph = {
+      name: "G",
+      attributes: {
+        goal: "Test",
+        label: "",
+        modelStylesheet: "",
+        defaultMaxRetry: 0,
+        retryTarget: "",
+        fallbackRetryTarget: "",
+        defaultFidelity: "",
+        raw: new Map(),
+      },
+      nodes: new Map([["../../evil", evilNode]]),
+      edges: [],
+    };
+
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+
+    await expect(
+      handler.execute(evilNode, new Context(), graph, config as any)
+    ).rejects.toThrow(/would escape logsRoot/);
+  });
+
   it("includes outgoing edge labels in status instruction", async () => {
     const graph = parse(`
       digraph G {

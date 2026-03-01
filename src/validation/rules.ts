@@ -272,6 +272,23 @@ function goalGateHasRetryRule(graph: Graph): Diagnostic[] {
   return diags;
 }
 
+function nodeIdSafeRule(graph: Graph): Diagnostic[] {
+  const diags: Diagnostic[] = [];
+  for (const node of graph.nodes.values()) {
+    const hasPathSep = node.id.includes("/") || node.id.includes("\\");
+    const hasParentSegment = node.id.split(/[/\\]/).some((part) => part === "..");
+    if (hasPathSep || hasParentSegment) {
+      diags.push({
+        rule: "node_id_safe",
+        severity: "error",
+        message: `Node id '${node.id}' contains path traversal characters ('/', '\\', or '..')`,
+        nodeId: node.id,
+      });
+    }
+  }
+  return diags;
+}
+
 function promptOnLlmNodesRule(graph: Graph): Diagnostic[] {
   const diags: Diagnostic[] = [];
   for (const node of graph.nodes.values()) {
@@ -302,5 +319,6 @@ export const BUILT_IN_RULES: LintRule[] = [
   fidelityValidRule,
   retryTargetExistsRule,
   goalGateHasRetryRule,
+  nodeIdSafeRule,
   promptOnLlmNodesRule,
 ];

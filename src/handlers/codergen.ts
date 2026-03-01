@@ -166,6 +166,14 @@ export class CodergenHandler implements Handler {
 
     // 3. Build status instruction
     const stageDir = path.join(config.logsRoot, node.id);
+
+    // Guard against path traversal: node.id must not escape logsRoot
+    const resolvedStageDir = path.resolve(stageDir);
+    const resolvedLogsRoot = path.resolve(config.logsRoot);
+    if (!resolvedStageDir.startsWith(resolvedLogsRoot + path.sep)) {
+      throw new Error(`Node id '${node.id}' would escape logsRoot — path traversal rejected`);
+    }
+
     const statusFilePath = path.join(stageDir, "status.json");
     const systemPromptAppend = buildStatusInstruction(statusFilePath, node, graph);
 
