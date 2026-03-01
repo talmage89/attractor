@@ -317,6 +317,39 @@ describe("CodergenHandler", () => {
     expect(options.systemPromptAppend).toContain("outcome");
   });
 
+  it("forwards CC SDK messages as cc_event pipeline events", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt="Do work"]
+        s -> work -> e
+      }
+    `);
+
+    const fakeSdkMessage = { type: "assistant", content: [{ type: "text", text: "hello" }] };
+
+    mockRunCC.mockImplementationOnce(async (_prompt, _opts, onEvent) => {
+      onEvent?.(fakeSdkMessage as any);
+      return makeCCResult();
+    });
+
+    const emittedEvents: any[] = [];
+    const handler = new CodergenHandler(sessionManager);
+    const config = {
+      ...makeConfig(),
+      onEvent: (e: any) => emittedEvents.push(e),
+    };
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, config as any);
+
+    const ccEvents = emittedEvents.filter((e) => e.kind === "cc_event");
+    expect(ccEvents).toHaveLength(1);
+    expect(ccEvents[0].nodeId).toBe("work");
+    expect(ccEvents[0].event).toBe(fakeSdkMessage);
+    expect(typeof ccEvents[0].timestamp).toBe("number");
+  });
+
   it("includes outgoing edge labels in status instruction", async () => {
     const graph = parse(`
       digraph G {

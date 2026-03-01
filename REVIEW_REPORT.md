@@ -92,7 +92,7 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:183`
 - **Description:** The spec (Section 9.5) says the codergen handler should call `runCC(prompt, ccOptions, (event) => { config.onEvent?.({kind: "cc_event", nodeId: node.id, event, timestamp: Date.now()}) })`. The implementation calls `runCC(finalPrompt, ccOptions)` without the third `onEvent` callback argument. CC SDK messages (assistant messages, tool uses, progress) are silently dropped. Users who subscribe to pipeline events to observe CC execution in real time (e.g., for streaming output to a UI) receive nothing. This is coupled with FINDING-002: even after adding the callback, the `cc_event` type would need to be in the `PipelineEvent` union before it can be safely emitted.
 - **Recommendation:** Pass the event callback as the third argument to `runCC`:
@@ -149,5 +149,5 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 - Critical: 0
 - High: 1 (RESOLVED)
 - Medium: 1 (RESOLVED)
-- Low: 5 (3 OPEN, 2 RESOLVED)
+- Low: 5 (2 OPEN, 3 RESOLVED)
 - Trivial: 0

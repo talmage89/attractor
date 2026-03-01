@@ -180,7 +180,9 @@ export class CodergenHandler implements Handler {
     if (node.timeout !== null && node.timeout !== undefined) ccOptions.timeout = node.timeout;
     if (resumeSessionId) ccOptions.resume = resumeSessionId;
 
-    const ccResult = await runCC(finalPrompt, ccOptions);
+    const ccResult = await runCC(finalPrompt, ccOptions, (sdkEvent) => {
+      config.onEvent?.({ kind: "cc_event", nodeId: node.id, event: sdkEvent, timestamp: Date.now() });
+    });
 
     // 6. Track session for full fidelity
     if (fidelity === "full" && ccResult.sessionId) {
