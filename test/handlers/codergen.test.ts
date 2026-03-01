@@ -662,7 +662,7 @@ describe("parseStatusFile", () => {
     expect(outcome.suggestedNextIds).toEqual(["a", "b", "c"]);
   });
 
-  it("defaults to fail when outcome field is missing", () => {
+  it("defaults to fail when outcome field is missing (notes used as failureReason)", () => {
     const data = { notes: "did stuff" };
     const outcome = parseStatusFile(data, "test");
     expect(outcome.status).toBe("fail");
