@@ -275,8 +275,9 @@ function goalGateHasRetryRule(graph: Graph): Diagnostic[] {
 function promptOnLlmNodesRule(graph: Graph): Diagnostic[] {
   const diags: Diagnostic[] = [];
   for (const node of graph.nodes.values()) {
-    const isLlmNode = node.shape === "box" || !node.type;
-    if (isLlmNode && !node.prompt && !node.label) {
+    const isLlmNode = node.shape === "box" || (!node.type && node.shape === "");
+    const hasExplicitLabel = node.raw.has("label");
+    if (isLlmNode && !node.prompt && !hasExplicitLabel) {
       diags.push({
         rule: "prompt_on_llm_nodes",
         severity: "warning",

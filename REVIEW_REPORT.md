@@ -78,7 +78,7 @@ The codebase continues to be in excellent shape after eight prior review cycles.
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/validation/rules.ts:275-289`
 - **Description:** The rule fires when `isLlmNode && !node.prompt && !node.label`. However, the parser always sets `label` to the node's ID when no explicit label is specified (see `defaultGraphNode` in `parser.ts`). This means `node.label` is always a non-empty string for every node produced by the parser, making `!node.label` permanently false. The rule can never trigger for any valid graph, rendering it a silent no-op. The test for this rule (`validator.test.ts`) does not exercise the warning path, only the non-warning path, which confirms the warning was never reachable.
 - **Recommendation:** Change the condition to detect nodes with no explicit `prompt` attribute and whose label equals their ID (the default, auto-assigned value):

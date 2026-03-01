@@ -294,7 +294,7 @@ describe("validation", () => {
   });
 
   describe("promptOnLlmNodesRule", () => {
-    it("warns when a box node has no prompt or label", () => {
+    it("warns when a box node has no explicit prompt or label", () => {
       const graph = parse(`
         digraph G {
           s [shape=Mdiamond]
@@ -305,8 +305,36 @@ describe("validation", () => {
       `);
       const diags = validate(graph);
       const rule = diags.filter(d => d.rule === "prompt_on_llm_nodes");
-      // "a" has label defaulting to "a" (the node ID), which is non-empty.
-      // This should NOT warn — the label default is the ID.
+      // "a" has no explicit prompt and no explicit label — warning should fire.
+      expect(rule).toHaveLength(1);
+      expect(rule[0].nodeId).toBe("a");
+    });
+
+    it("does not warn when a box node has an explicit label", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          a [shape=box, label="Do the thing"]
+          s -> a -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_on_llm_nodes");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not warn when a box node has an explicit prompt", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          a [shape=box, prompt="Do the thing"]
+          s -> a -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_on_llm_nodes");
       expect(rule).toHaveLength(0);
     });
   });
