@@ -99,7 +99,7 @@ The codebase is in good shape after three prior review cycles. All previous find
 
 - **Severity:** TRIVIAL
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/parallel.ts:68-71`
 - **Description:** The phase 8 spec defines the `ParallelHandler` constructor as `constructor(private registry: HandlerRegistry, private sessionManager: SessionManager)`. The implementation only accepts `registry`:
   ```typescript
