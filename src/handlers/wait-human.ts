@@ -61,6 +61,10 @@ export class WaitForHumanHandler implements Handler {
     if (answer.value === "TIMEOUT" || answer.value === "SKIPPED") {
       const defaultChoiceId = node.raw.get("human.default_choice");
       if (defaultChoiceId) {
+        // Spec defines lookup by target node id (c.to) or accelerator key (c.key).
+        // Extension: also match by label (case-insensitive) for usability — allows
+        // human.default_choice to reference a choice by its full display label without
+        // requiring the author to know the auto-generated accelerator key or target id.
         const defaultChoice = choices.find(
           (c) =>
             c.to === defaultChoiceId ||

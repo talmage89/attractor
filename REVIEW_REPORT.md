@@ -176,11 +176,12 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/wait-human.ts:63-69`
 - **Description:** The spec defines default choice lookup as `choices.find(c => c.to === defaultChoice || c.key === defaultChoice)`. The implementation adds a third case-insensitive condition: `c.label.toLowerCase() === defaultChoiceId.toLowerCase()`. Not a bug — it is a usability improvement — but it is an undocumented deviation.
 
 - **Recommendation:** Document this as an intentional extension in either a code comment or the spec. No code change required.
+- **Resolution:** Added a 4-line comment above the `choices.find` call explaining that the spec defines lookup by `c.to` and `c.key`, and that the `c.label` case-insensitive match is an intentional usability extension. No code change.
 
 ---
 
