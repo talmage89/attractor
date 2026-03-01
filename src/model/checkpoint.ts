@@ -6,6 +6,9 @@ export interface Checkpoint {
   timestamp: number;
   currentNode: string;
   completedNodes: string[];
+  // Extension beyond spec: required for correct goal-gate evaluation after
+  // checkpoint resume. Without restoring nodeOutcomes, checkGoalGates would
+  // always see an empty outcomes map and fail to detect unsatisfied gates.
   nodeOutcomes: Record<string, Outcome>;
   nodeRetries: Record<string, number>;
   contextValues: Record<string, unknown>;

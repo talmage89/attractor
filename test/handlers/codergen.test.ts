@@ -574,7 +574,19 @@ describe("buildStatusInstruction", () => {
 
 describe("parseStatusFile", () => {
   it("parses a valid status file", () => {
-    // Tested implicitly via the "reads status.json" test above
+    const data = { outcome: "success", notes: "all good" };
+    const outcome = parseStatusFile(data, "test-node");
+    expect(outcome.status).toBe("success");
+    expect(outcome.notes).toBe("all good");
+  });
+
+  it("defaults to fail when outcome field is missing", () => {
+    const data = { notes: "something went wrong" };
+    const outcome = parseStatusFile(data, "test-node");
+    expect(outcome.status).toBe("fail");
+    expect(outcome.failureReason).toBe(
+      "Missing or unrecognised outcome field in status.json"
+    );
   });
 
   it("filters non-string elements from suggested_next_ids", () => {
