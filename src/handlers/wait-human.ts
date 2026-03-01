@@ -77,8 +77,8 @@ export class WaitForHumanHandler implements Handler {
         }
       }
       return {
-        status: "fail",
-        failureReason: "Human gate timed out or was skipped with no default choice",
+        status: "retry",
+        failureReason: "Human gate timeout, no default",
       };
     }
 

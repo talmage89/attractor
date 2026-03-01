@@ -148,6 +148,30 @@ describe("WaitForHumanHandler", () => {
     expect(outcome.suggestedNextIds).toContain("fallback");
   });
 
+  it("returns retry on SKIPPED with no default choice configured", async () => {
+    const graph = makeGraph(`
+      digraph G {
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        gate [shape=hexagon]
+        yes [shape=box]
+        no  [shape=box]
+        s -> gate
+        gate -> yes [label="[Y] Yes"]
+        gate -> no  [label="[N] No"]
+        yes -> e
+        no -> e
+      }
+    `);
+
+    // Queue is empty, so interviewer returns SKIPPED; no default_choice on node
+    const interviewer = new QueueInterviewer([]);
+    const handler = new WaitForHumanHandler(interviewer);
+    const outcome = await handler.execute(graph.nodes.get("gate")!, new Context(), graph, {} as any);
+    expect(outcome.status).toBe("retry");
+    expect(outcome.failureReason).toContain("timeout");
+  });
+
   it("defaults to first choice on unrecognized answer", async () => {
     const graph = makeGraph(`
       digraph G {

@@ -44,10 +44,11 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 
 - **Severity:** MEDIUM
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/wait-human.ts:78-83`
 - **Description:** The spec (Section 9.7) says: `return { status: "retry", failureReason: "Human gate timeout, no default" }` when `TIMEOUT` or `SKIPPED` is received and no `human.default_choice` is configured. The implementation returns `{ status: "fail", failureReason: "Human gate timed out or was skipped with no default choice" }`. With `"retry"` status, nodes that have `max_retries > 0` would re-prompt the human. With `"fail"`, the pipeline immediately routes to the fail path. For fully unattended pipelines with human gates and no defaults configured, this causes immediate failure instead of giving the human a second chance.
 - **Recommendation:** Change the return value to `{ status: "retry", failureReason: "Human gate timed out or was skipped with no default choice" }` to match the spec.
+- **Fix:** Changed `status: "fail"` to `status: "retry"` and updated the `failureReason` message to match the spec. Added a test covering SKIPPED with no default. 241 tests pass.
 
 ---
 
