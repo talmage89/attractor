@@ -127,6 +127,20 @@ describe("generatePreamble", () => {
     expect(preamble.length).toBeLessThan(800);
   });
 
+  it("filters __ prefixed keys from context sections", () => {
+    const ctx = new Context();
+    ctx.set("visible.key", "shown");
+    ctx.set("__completedNodes", '["plan"]');
+    ctx.set("__nodeOutcomes", '[["plan",{"status":"success"}]]');
+    const graph = makeGraph({ goal: "Test" });
+    for (const mode of ["compact", "summary:medium", "summary:high"] as const) {
+      const preamble = generatePreamble(mode, ctx, graph, [], new Map());
+      expect(preamble).toContain("visible.key");
+      expect(preamble).not.toContain("__completedNodes");
+      expect(preamble).not.toContain("__nodeOutcomes");
+    }
+  });
+
   it("summary:high produces detailed output", () => {
     const ctx = new Context();
     ctx.set("key1", "value1");

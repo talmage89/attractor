@@ -46,7 +46,7 @@ export function generatePreamble(
       }
     }
 
-    const ctxKeys = context.keys();
+    const ctxKeys = context.keys().filter(k => !k.startsWith("__"));
     if (ctxKeys.length > 0) {
       lines.push("", "### Current Context");
       for (const k of ctxKeys) {
@@ -91,7 +91,7 @@ export function generatePreamble(
       }
     }
 
-    const ctxKeys = context.keys();
+    const ctxKeys = context.keys().filter(k => !k.startsWith("__"));
     if (ctxKeys.length > 0) {
       lines.push("", "### Active Context");
       for (const k of ctxKeys) {
@@ -124,7 +124,7 @@ export function generatePreamble(
     }
   }
 
-  const ctxKeys = context.keys();
+  const ctxKeys = context.keys().filter(k => !k.startsWith("__"));
   if (ctxKeys.length > 0) {
     lines.push("", "### Full Context");
     for (const k of ctxKeys) {

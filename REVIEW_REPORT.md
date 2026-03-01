@@ -72,10 +72,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** MEDIUM
 - **Category:** Correctness / Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/backend/preamble.ts:49-55`, `src/engine/runner.ts:220-221`
 - **Description:** The runner sets `__completedNodes` (JSON array string) and `__nodeOutcomes` (JSON array of tuples string) as context keys on every node execution (lines 220-221). The preamble generator iterates `context.keys()` and includes all keys in the "Current Context" section without filtering `__` prefixed keys. This means LLM prompts for `compact`, `summary:medium`, and `summary:high` fidelity modes include raw JSON blobs like `__completedNodes: ["plan","implement"]` and `__nodeOutcomes: [["plan",{"status":"success"}]]`. These are machine-internal keys that make the prompt harder to read.
-- **Recommendation:** In `generatePreamble`, filter out keys starting with `__` when building the context section: `const ctxKeys = context.keys().filter(k => !k.startsWith("__"))`.
+- **Fix:** Added `.filter(k => !k.startsWith("__"))` to all three `context.keys()` calls in `generatePreamble` (compact, summary:medium, summary:high modes). Added a test that verifies `__completedNodes` and `__nodeOutcomes` are absent while a normal key is still present. All 223 tests pass.
 
 ---
 
@@ -182,7 +182,7 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - Total findings: 15
 - Critical: 0
-- High: 2
-- Medium: 4
-- Low: 6
-- Trivial: 3
+- High: 2 (all resolved)
+- Medium: 4 (3 resolved, 1 open)
+- Low: 6 (all open)
+- Trivial: 3 (all open)
