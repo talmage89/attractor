@@ -496,6 +496,42 @@ describe("execution engine", () => {
     expect(flagsByNode["b"]).toBeFalsy();
   });
 
+  it("emits error event when handler throws and retries are exhausted", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test error event", default_max_retry=0]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a -> e
+      }
+    `);
+
+    const throwingHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        throw new Error("handler exploded");
+      },
+    };
+    const registry = new HandlerRegistry(throwingHandler);
+    const events: PipelineEvent[] = [];
+
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+      onEvent: (e) => events.push(e),
+    });
+
+    const errorEvents = events.filter(e => e.kind === "error");
+    expect(errorEvents).toHaveLength(1);
+    const evt = errorEvents[0] as Extract<PipelineEvent, { kind: "error" }>;
+    expect(evt.nodeId).toBe("a");
+    expect(evt.message).toBe("handler exploded");
+    expect(typeof evt.timestamp).toBe("number");
+  });
+
   it("restores sessionMap from checkpoint to SessionManager on resume", async () => {
     const graph = parse(`
       digraph G {

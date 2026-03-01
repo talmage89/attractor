@@ -73,7 +73,7 @@ The codebase is in good shape after three prior review cycles. All previous find
 
 - **Severity:** LOW
 - **Category:** Spec Compliance / Observability
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts`, `src/engine/retry.ts`
 - **Description:** The `error` variant was added to `PipelineEvent` in a prior review cycle to "surface runtime errors to monitoring callers without crashing the pipeline." However, no code path in the system actually emits this event:
   - `executeWithRetry` catches handler exceptions and converts them to `{ status: "fail" }` outcomes — no `error` event is emitted.

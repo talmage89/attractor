@@ -58,6 +58,12 @@ export async function executeWithRetry(
         continue;
       }
       const message = error instanceof Error ? error.message : String(error);
+      config.onEvent?.({
+        kind: "error",
+        nodeId: node.id,
+        message,
+        timestamp: Date.now(),
+      });
       return { status: "fail", failureReason: message };
     }
 
