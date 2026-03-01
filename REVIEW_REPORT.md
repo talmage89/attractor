@@ -140,7 +140,7 @@ The Attractor codebase is in excellent shape after nine prior review cycles. All
 
 - **Severity:** TRIVIAL
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/model/events.ts:33`
 - **Description:** The implementation adds a `"warning"` variant to `PipelineEvent`:
 
@@ -151,6 +151,7 @@ The Attractor codebase is in excellent shape after nine prior review cycles. All
   This variant is not listed in SPEC Section 16.1's `PipelineEvent` union. The spec ends at `"error"`. The warning event is currently emitted only by `ParallelHandler` when an unrecognized `join_policy` is encountered (`src/handlers/parallel.ts:90-95`). While this is a useful extension, it is undocumented.
 
 - **Recommendation:** Either (a) add the `"warning"` event to the spec in `docs/SPEC.md` Section 16.1 to formally document this extension, or (b) fold the warning into an `"error"` event with an appropriate severity tag. No action is strictly required — this finding does not break any behavior.
+- **Resolution:** Added `| { kind: "warning"; message: string; nodeId?: string; timestamp: number }` to the `PipelineEvent` union in `docs/SPEC.md` Section 16.1, formally documenting the extension.
 
 ---
 

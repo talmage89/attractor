@@ -1900,6 +1900,7 @@ type PipelineEvent =
   | { kind: "parallel_branch_completed"; nodeId: string; branchIndex: number; outcome: Outcome; timestamp: number }
   | { kind: "parallel_completed"; nodeId: string; successCount: number; failCount: number; timestamp: number }
   | { kind: "cc_event"; nodeId: string; event: SDKMessage; timestamp: number }
+  | { kind: "warning"; message: string; nodeId?: string; timestamp: number }
   | { kind: "error"; message: string; nodeId?: string; timestamp: number };
 ```
 
