@@ -58,7 +58,7 @@ This is the fifteenth code review pass of the Attractor TypeScript DAG pipeline 
 
 - **Severity:** LOW
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/model/graph.ts:69-80`
 - **Description:** The two exported functions for identifying exit/terminal nodes use different predicates:
 
@@ -100,7 +100,7 @@ This is the fifteenth code review pass of the Attractor TypeScript DAG pipeline 
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/index.ts`
 - **Description:** The `FidelityMode` type (`"full" | "truncate" | "compact" | "summary:low" | "summary:medium" | "summary:high"`) is defined in `src/model/fidelity.ts` but not re-exported from `src/index.ts`. External consumers who want type-safe fidelity mode values — for example, when implementing a custom handler that reads `resolveFidelity()` output — must import from `src/model/fidelity.js` directly (an internal module path) or use untyped string literals.
 

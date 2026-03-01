@@ -5,6 +5,7 @@ export { validate, validateOrThrow } from "./validation/validator.js";
 export type { Graph, GraphNode, Edge } from "./model/graph.js";
 export type { Outcome, StageStatus } from "./model/outcome.js";
 export type { PipelineEvent } from "./model/events.js";
+export type { FidelityMode } from "./model/fidelity.js";
 export type { Interviewer, Question, Answer } from "./interviewer/interviewer.js";
 export { ConsoleInterviewer } from "./interviewer/console.js";
 export { AutoApproveInterviewer } from "./interviewer/auto-approve.js";

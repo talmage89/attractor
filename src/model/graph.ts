@@ -68,7 +68,7 @@ export function findStartNode(graph: Graph): GraphNode | null {
 
 export function findExitNode(graph: Graph): GraphNode | null {
   for (const node of graph.nodes.values()) {
-    if (node.shape === "Msquare") return node;
+    if (node.shape === "Msquare" || node.type === "exit") return node;
   }
   return (
     graph.nodes.get("exit") ?? graph.nodes.get("end") ?? null
