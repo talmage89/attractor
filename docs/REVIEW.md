@@ -6,9 +6,8 @@ You are performing a thorough code review of the Attractor project. Your goal is
 
 1. Read the full specification: `docs/SPEC.md`
 2. Read the phase overview: `docs/phases/00-overview.md`
-3. Read the audit document: `docs/phases/AUDIT.md`
-4. Read every source file in `src/` and every test file in `tests/`
-5. Run `npx vitest` to confirm all tests pass before starting the review
+3. Read every source file in `src/` and every test file in `tests/`
+4. Run `npx vitest` to confirm all tests pass before starting the review
 
 ## Review Dimensions
 

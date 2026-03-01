@@ -129,6 +129,5 @@ This is a one-time setup. Subsequent agents should find the project already init
 - Full specification: `docs/SPEC.md`
 - Phase overview: `docs/phases/00-overview.md`
 - Individual phase specs: `docs/phases/01-*.md` through `docs/phases/08-*.md`
-- Audit of spec gaps (all resolved): `docs/phases/AUDIT.md`
 - Code review instructions: `docs/REVIEW.md`
 - Usage testing instructions: `docs/TESTING.md`
