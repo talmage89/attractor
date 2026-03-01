@@ -59,4 +59,32 @@ describe("transforms", () => {
     applyTransforms(graph);
     expect(graph.nodes.get("a")?.prompt).toBe("Goal is: ");
   });
+
+  it("expands $goal in tool_command", () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="my-project"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        t [shape=box, tool_command="build.sh $goal"]
+        s -> t -> e
+      }
+    `);
+    applyTransforms(graph);
+    expect(graph.nodes.get("t")?.raw.get("tool_command")).toBe("build.sh my-project");
+  });
+
+  it("does not modify tool_command without $goal", () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="ignored"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        t [shape=box, tool_command="npm test"]
+        s -> t -> e
+      }
+    `);
+    applyTransforms(graph);
+    expect(graph.nodes.get("t")?.raw.get("tool_command")).toBe("npm test");
+  });
 });

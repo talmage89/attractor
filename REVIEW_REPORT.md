@@ -202,11 +202,12 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/tool.ts:74-80`
 - **Description:** `ToolHandler` executes `tool_command` verbatim without substituting context variables. By contrast, `CodergenHandler` benefits from `$goal` substitution via `applyTransforms`. A user who writes `tool_command="run-tests --dir ${context.build_dir}"` in a DOT file will find the literal string passed unchanged to the shell. This limitation is not documented.
 
 - **Recommendation:** Document this limitation explicitly in the spec and/or code comments. Optionally, apply the same `applyTransforms` variable substitution to `tool_command` values.
+- **Resolution:** Extended `applyTransforms` to also substitute `$goal` in `tool_command` values (stored in `node.raw`), consistent with how `node.prompt` is handled. Added a comment in `tool.ts` documenting that `$goal` substitution is applied by `applyTransforms` before execution and that other context variable interpolation is not supported. Added 2 tests to `transforms.test.ts` covering the new behaviour. 304 tests passing.
 
 ---
 

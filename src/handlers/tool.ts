@@ -71,6 +71,8 @@ export class ToolHandler implements Handler {
     _graph: Graph,
     config: RunConfig
   ): Promise<Outcome> {
+    // $goal substitution is applied to tool_command by applyTransforms before
+    // the handler is invoked. Other context variable interpolation is not supported.
     const command = node.raw.get("tool_command");
     if (!command) {
       return { status: "fail", failureReason: "No tool_command specified" };
