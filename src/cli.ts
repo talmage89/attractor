@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { parse } from "./parser/parser.js";
 import { validate } from "./validation/validator.js";
 import { applyTransforms } from "./engine/transforms.js";
@@ -241,7 +242,10 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  process.stderr.write(`Fatal: ${err.message}\n`);
-  process.exit(3);
-});
+// Only run when executed directly, not when imported by tests or other modules.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    process.stderr.write(`Fatal: ${err.message}\n`);
+    process.exit(3);
+  });
+}
