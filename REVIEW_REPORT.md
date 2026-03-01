@@ -28,7 +28,7 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 
 - **Severity:** MEDIUM
 - **Category:** Spec Compliance / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/wait-human.ts:86-97`
 - **Description:** The spec (Section 9.7) says when no choice matches the user's answer, fall back to the first choice: `choices.find(...) ?? choices[0]`. The implementation instead returns `{ status: "fail", failureReason: "Unknown choice: ..." }`. This means if a user types an unrecognized response (a typo, or the full label instead of the accelerator key, or anything the matching logic doesn't handle), the human gate immediately fails and the pipeline takes the failure path. The spec's intent is that an unrecognized answer gracefully defaults to the first available choice, allowing pipelines to continue.
 - **Recommendation:** Change the not-found branch to return the first-choice result instead of fail:
@@ -36,6 +36,7 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
   const selected = choices.find(...) ?? choices[0];
   // then return { status: "success", suggestedNextIds: [selected.to], ... }
   ```
+- **Fix:** Changed `choices.find(...) ?? choices[0]` — the `if (!selected)` fail branch was removed and `choices[0]` is now used as the nullish-coalescing fallback. Added a test covering the unrecognized answer case. 240 tests pass.
 
 ---
 

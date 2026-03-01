@@ -82,19 +82,13 @@ export class WaitForHumanHandler implements Handler {
       };
     }
 
-    // Match answer by key or label (case-insensitive)
-    const selected = choices.find(
-      (c) =>
-        c.key.toLowerCase() === answer.value.toLowerCase() ||
-        c.label.toLowerCase() === answer.value.toLowerCase()
-    );
-
-    if (!selected) {
-      return {
-        status: "fail",
-        failureReason: `Unknown choice: ${answer.value}`,
-      };
-    }
+    // Match answer by key or label (case-insensitive); fall back to first choice
+    const selected =
+      choices.find(
+        (c) =>
+          c.key.toLowerCase() === answer.value.toLowerCase() ||
+          c.label.toLowerCase() === answer.value.toLowerCase()
+      ) ?? choices[0];
 
     return {
       status: "success",

@@ -148,6 +148,29 @@ describe("WaitForHumanHandler", () => {
     expect(outcome.suggestedNextIds).toContain("fallback");
   });
 
+  it("defaults to first choice on unrecognized answer", async () => {
+    const graph = makeGraph(`
+      digraph G {
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        gate [shape=hexagon]
+        first  [shape=box]
+        second [shape=box]
+        s -> gate
+        gate -> first  [label="[F] First"]
+        gate -> second [label="[S] Second"]
+        first -> e
+        second -> e
+      }
+    `);
+
+    const interviewer = new QueueInterviewer([{ value: "totally_invalid" }]);
+    const handler = new WaitForHumanHandler(interviewer);
+    const outcome = await handler.execute(graph.nodes.get("gate")!, new Context(), graph, {} as any);
+    expect(outcome.status).toBe("success");
+    expect(outcome.suggestedNextIds).toContain("first");
+  });
+
   it("populates context updates with selection", async () => {
     const graph = makeGraph(`
       digraph G {
