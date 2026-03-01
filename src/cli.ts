@@ -127,7 +127,8 @@ async function cmdRun(args: string[]): Promise<void> {
       event.kind === "pipeline_completed" ||
       event.kind === "stage_started" ||
       event.kind === "stage_completed" ||
-      event.kind === "human_question"
+      event.kind === "human_question" ||
+      event.kind === "error"
     ) {
       process.stderr.write(line + "\n");
     }

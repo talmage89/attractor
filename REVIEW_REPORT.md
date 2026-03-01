@@ -73,7 +73,7 @@ The codebase is in excellent shape after four prior review cycles with all previ
 
 - **Severity:** LOW
 - **Category:** Usability / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/cli.ts:122-134`
 - **Description:** The `onEvent` handler in `cmdRun` only prints events to stderr for a fixed set of "normal" events:
   ```typescript
