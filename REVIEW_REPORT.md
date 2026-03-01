@@ -138,10 +138,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:141-204`
 - **Description:** The spec's terminal check (Section 8.2, step a) says: "Run goal gate check. If unsatisfied, find retry target and set currentNode to it." The spec does not mention executing the terminal node handler. The implementation runs the exit handler (`executeWithRetry` at line 156) and then checks goal gates (line 183). While running the exit handler makes practical sense (it may produce context updates), it's an undocumented extension of the spec.
-- **Recommendation:** Add a comment documenting that the exit handler is executed before goal gate evaluation, and note this as intentional extension of the spec. Alternatively, move goal gate check to before exit handler execution if spec fidelity is required.
+- **Fix:** Added a comment in runner.ts at the CHECK TERMINAL block explaining that the exit handler is executed before goal gate evaluation as an intentional spec extension, and that this allows context updates from the exit handler to be available during goal gate evaluation. All 235 tests pass.
 
 ---
 
@@ -184,5 +184,5 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 - Critical: 0
 - High: 2 (all resolved)
 - Medium: 4 (all resolved)
-- Low: 6 (4 resolved, 2 open)
+- Low: 6 (5 resolved, 1 open)
 - Trivial: 3 (all open)

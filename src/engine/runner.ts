@@ -135,7 +135,13 @@ export async function run(config: RunConfig): Promise<RunResult> {
   loop: while (true) {
     // a. CHECK TERMINAL
     if (isTerminal(currentNode)) {
-      // Execute exit node but don't add to completedNodes
+      // NOTE (spec extension): The spec (Section 8.2, step a) describes running
+      // the goal gate check at the terminal node without mentioning executing
+      // the exit handler. This implementation executes the exit handler first so
+      // that any context updates it produces (e.g. setting "outcome") are
+      // available before goal gate evaluation. This is an intentional,
+      // documented extension of the spec. Goal gate check still happens below
+      // after the handler returns.
       const nodeStart = Date.now();
       emit(config, {
         kind: "stage_started",
