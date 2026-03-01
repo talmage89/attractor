@@ -1,0 +1,150 @@
+import { describe, it, expect } from "vitest";
+import { parseCondition } from "../../src/conditions/parser";
+import { evaluateCondition } from "../../src/conditions/evaluator";
+import { Context } from "../../src/model/context";
+
+describe("condition parser", () => {
+  it("parses a simple equality", () => {
+    const clauses = parseCondition("outcome=success");
+    expect(clauses).toEqual([
+      { key: "outcome", operator: "=", value: "success" }
+    ]);
+  });
+
+  it("parses not-equals", () => {
+    const clauses = parseCondition("outcome!=success");
+    expect(clauses).toEqual([
+      { key: "outcome", operator: "!=", value: "success" }
+    ]);
+  });
+
+  it("parses AND conjunction", () => {
+    const clauses = parseCondition("outcome=success && context.tests_passed=true");
+    expect(clauses).toHaveLength(2);
+    expect(clauses[0]).toEqual({ key: "outcome", operator: "=", value: "success" });
+    expect(clauses[1]).toEqual({ key: "context.tests_passed", operator: "=", value: "true" });
+  });
+
+  it("parses bare key as truthy check", () => {
+    const clauses = parseCondition("context.has_flag");
+    expect(clauses).toEqual([
+      { key: "context.has_flag", operator: "!=", value: "" }
+    ]);
+  });
+
+  it("trims whitespace", () => {
+    const clauses = parseCondition("  outcome = success  ");
+    expect(clauses[0].key).toBe("outcome");
+    expect(clauses[0].value).toBe("success");
+  });
+
+  it("returns empty array for empty string", () => {
+    expect(parseCondition("")).toEqual([]);
+  });
+
+  it("handles multiple && with spaces", () => {
+    const clauses = parseCondition("a=1 && b=2 && c!=3");
+    expect(clauses).toHaveLength(3);
+  });
+});
+
+describe("condition evaluator", () => {
+  function makeContext(values: Record<string, string>): Context {
+    const ctx = new Context();
+    for (const [k, v] of Object.entries(values)) {
+      ctx.set(k, v);
+    }
+    return ctx;
+  }
+
+  it("empty condition returns true", () => {
+    expect(evaluateCondition("", { status: "success" }, new Context())).toBe(true);
+  });
+
+  it("matches outcome=success", () => {
+    expect(evaluateCondition(
+      "outcome=success",
+      { status: "success" },
+      new Context()
+    )).toBe(true);
+  });
+
+  it("rejects outcome=success when outcome is fail", () => {
+    expect(evaluateCondition(
+      "outcome=success",
+      { status: "fail" },
+      new Context()
+    )).toBe(false);
+  });
+
+  it("matches outcome!=success", () => {
+    expect(evaluateCondition(
+      "outcome!=success",
+      { status: "fail" },
+      new Context()
+    )).toBe(true);
+  });
+
+  it("resolves context values", () => {
+    const ctx = makeContext({ "tests_passed": "true" });
+    expect(evaluateCondition(
+      "context.tests_passed=true",
+      { status: "success" },
+      ctx
+    )).toBe(true);
+  });
+
+  it("resolves context values without prefix", () => {
+    const ctx = makeContext({ "tests_passed": "true" });
+    // context.tests_passed first checks the full key "context.tests_passed",
+    // if not found, tries "tests_passed"
+    expect(evaluateCondition(
+      "context.tests_passed=true",
+      { status: "success" },
+      ctx
+    )).toBe(true);
+  });
+
+  it("missing context values resolve to empty string", () => {
+    expect(evaluateCondition(
+      "context.missing=true",
+      { status: "success" },
+      new Context()
+    )).toBe(false);
+  });
+
+  it("AND conjunction: all must pass", () => {
+    const ctx = makeContext({ "flag": "true" });
+    expect(evaluateCondition(
+      "outcome=success && context.flag=true",
+      { status: "success" },
+      ctx
+    )).toBe(true);
+  });
+
+  it("AND conjunction: one fails → false", () => {
+    const ctx = makeContext({ "flag": "false" });
+    expect(evaluateCondition(
+      "outcome=success && context.flag=true",
+      { status: "success" },
+      ctx
+    )).toBe(false);
+  });
+
+  it("resolves preferred_label", () => {
+    expect(evaluateCondition(
+      "preferred_label=Fix",
+      { status: "success", preferredLabel: "Fix" },
+      new Context()
+    )).toBe(true);
+  });
+
+  it("bare key truthy check: non-empty = true", () => {
+    const ctx = makeContext({ "has_flag": "yes" });
+    expect(evaluateCondition("context.has_flag", { status: "success" }, ctx)).toBe(true);
+  });
+
+  it("bare key truthy check: missing = false", () => {
+    expect(evaluateCondition("context.has_flag", { status: "success" }, new Context())).toBe(false);
+  });
+});
