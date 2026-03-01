@@ -109,7 +109,7 @@ The codebase continues to be in excellent shape after eight prior review cycles.
 
 - **Severity:** TRIVIAL
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/backend/cc-backend.ts:34-36`
 - **Description:** If `options.timeout` is `0`, `setTimeout(() => abortController.abort(), 0)` fires on the next tick, aborting the CC session before it has a chance to produce any output. There is no guard against zero. A `timeout: 0` attribute on a node (which the DOT parser would produce as `0` milliseconds if the user writes `timeout = "0"`) would cause every execution of that node to immediately fail with a timeout error. This is most likely a misconfiguration rather than intentional behavior.
 - **Recommendation:** Add a guard to skip the timeout setup for zero values:

@@ -31,7 +31,7 @@ export async function runCC(
   const abortController = new AbortController();
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
-  if (options.timeout !== undefined) {
+  if (options.timeout !== undefined && options.timeout > 0) {
     timeoutHandle = setTimeout(() => abortController.abort(), options.timeout);
   }
 
