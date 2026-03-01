@@ -149,10 +149,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:94-96`
 - **Description:** When parsing the status file, `obj.suggested_next_ids` is cast to `string[]` without element-level validation: `result.suggestedNextIds = obj.suggested_next_ids as string[]`. If the CC agent writes `{"suggested_next_ids": [1, 2]}` (numbers instead of strings), these would propagate as numbers into `selectEdge`, where string comparison (`e.to === suggestedId`) would always return false. The pipeline would silently fall through to weight-based selection.
-- **Recommendation:** Filter elements: `result.suggestedNextIds = (obj.suggested_next_ids as unknown[]).filter(x => typeof x === "string") as string[]`.
+- **Fix:** Changed the cast to `(obj.suggested_next_ids as unknown[]).filter(x => typeof x === "string") as string[]`. Added 2 tests verifying that non-string elements (numbers, null, booleans) are filtered out and valid string arrays pass through unchanged. All 237 tests pass.
 
 ---
 
@@ -184,5 +184,5 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 - Critical: 0
 - High: 2 (all resolved)
 - Medium: 4 (all resolved)
-- Low: 6 (5 resolved, 1 open)
+- Low: 6 (all resolved)
 - Trivial: 3 (all open)

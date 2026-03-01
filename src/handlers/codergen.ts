@@ -92,7 +92,9 @@ export function parseStatusFile(data: unknown, nodeId: string): Outcome {
   }
 
   if (Array.isArray(obj.suggested_next_ids)) {
-    result.suggestedNextIds = obj.suggested_next_ids as string[];
+    result.suggestedNextIds = (obj.suggested_next_ids as unknown[]).filter(
+      (x) => typeof x === "string"
+    ) as string[];
   }
 
   if (obj.context_updates && typeof obj.context_updates === "object") {

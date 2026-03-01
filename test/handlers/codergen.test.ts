@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { parseStatusFile } from "../../src/handlers/codergen.js";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -352,5 +353,23 @@ describe("buildStatusInstruction", () => {
 describe("parseStatusFile", () => {
   it("parses a valid status file", () => {
     // Tested implicitly via the "reads status.json" test above
+  });
+
+  it("filters non-string elements from suggested_next_ids", () => {
+    const data = {
+      outcome: "success",
+      suggested_next_ids: ["node-a", 42, null, "node-b", true],
+    };
+    const outcome = parseStatusFile(data, "test");
+    expect(outcome.suggestedNextIds).toEqual(["node-a", "node-b"]);
+  });
+
+  it("includes all-string suggested_next_ids unchanged", () => {
+    const data = {
+      outcome: "success",
+      suggested_next_ids: ["a", "b", "c"],
+    };
+    const outcome = parseStatusFile(data, "test");
+    expect(outcome.suggestedNextIds).toEqual(["a", "b", "c"]);
   });
 });
