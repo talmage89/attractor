@@ -94,10 +94,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** LOW
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:61-77`
 - **Description:** Line 62: `const handler = registry.resolve(node)` — the resolved handler is assigned but never used in the function body. The function proceeds to derive the type name from `node.type` and `node.shape` directly, making the `handler` variable entirely dead code.
-- **Recommendation:** Remove `const handler = registry.resolve(node)` from `handlerTypeFor`.
+- **Fix:** Removed `const handler = registry.resolve(node)` and also removed the now-unused `registry` parameter from `handlerTypeFor` (updating both call sites). All 235 tests pass.
 
 ---
 
@@ -184,5 +184,5 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 - Critical: 0
 - High: 2 (all resolved)
 - Medium: 4 (all resolved)
-- Low: 6 (all open)
+- Low: 6 (1 resolved, 5 open)
 - Trivial: 3 (all open)

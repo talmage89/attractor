@@ -53,10 +53,8 @@ function emit(config: RunConfig, event: PipelineEvent): void {
   }
 }
 
-function handlerTypeFor(node: GraphNode, registry: HandlerRegistry): string {
-  // Best-effort label for events
-  const handler = registry.resolve(node);
-  // Try to identify from node shape or type
+function handlerTypeFor(node: GraphNode): string {
+  // Best-effort label for events; derive type from node attributes, not the resolved handler
   if (node.type) return node.type;
   const shapeMap: Record<string, string> = {
     Mdiamond: "start",
@@ -144,7 +142,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
         kind: "stage_started",
         nodeId: currentNode.id,
         label: currentNode.label || currentNode.id,
-        handlerType: handlerTypeFor(currentNode, registry),
+        handlerType: handlerTypeFor(currentNode),
         timestamp: Date.now(),
       });
 
@@ -211,7 +209,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       kind: "stage_started",
       nodeId: currentNode.id,
       label: currentNode.label || currentNode.id,
-      handlerType: handlerTypeFor(currentNode, registry),
+      handlerType: handlerTypeFor(currentNode),
       timestamp: Date.now(),
     });
 
