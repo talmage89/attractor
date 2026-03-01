@@ -397,7 +397,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       from: currentNode.id,
       to: edge.to,
       label: edge.label,
-      reason: edge.condition ? "condition" : "weight",
+      reason: edge.condition ? "condition" : "auto",
       timestamp: Date.now(),
     });
 

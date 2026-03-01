@@ -33,7 +33,7 @@ The codebase continues to be in excellent shape after eight prior review cycles.
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:400`
 - **Description:** The `edge_selected` event is emitted with:
   ```typescript
