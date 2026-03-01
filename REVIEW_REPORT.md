@@ -1,128 +1,153 @@
 # Code Review Report
 
 **Date:** 2026-03-01
-**Reviewer:** AI Agent (second-pass)
-**Test Status:** All passing (237/237)
+**Reviewer:** AI Agent (third-pass)
+**Test Status:** All passing (246/246)
 
 ## Summary
 
-This is a fresh second-pass review conducted after all 15 findings from the first review were resolved. The implementation is functionally correct for the majority of use cases. Three MEDIUM spec deviations were found: (1) the session map is never persisted to checkpoints so full-fidelity CC sessions are lost on crash recovery, (2) `WaitForHumanHandler` returns `"fail"` on an unrecognized answer instead of defaulting to the first choice as the spec requires, and (3) `cmdRun` validates the graph before transforms are applied. Several LOW findings relate to missing defaults and a minor status parsing inversion.
+This is a fresh third-pass review. The codebase is well-structured and functionally correct for basic linear/conditional pipelines. Three significant gaps were found: (1) the CLI only registers CodergenHandler, leaving ToolHandler and ParallelHandler unregistered so tool commands and parallel branches silently never execute in production; (2) the `PipelineEvent` union type is missing the `cc_event` and `error` variants specified in the spec; and (3) several observability events (`stage_retrying`, `human_question`, `human_answer`, CC forwarding) are defined but never emitted.
 
 ---
 
 ## Findings
 
-### FINDING-001: sessionMap never populated in checkpoint; full-fidelity sessions lost on resume
+### FINDING-001: CLI only registers CodergenHandler; ToolHandler and ParallelHandler are never registered
 
 - **Severity:** HIGH
 - **Category:** Spec Compliance / Correctness
-- **Status:** RESOLVED
-- **File(s):** `src/engine/runner.ts:283-295`, `src/model/checkpoint.ts:5-13`
-- **Description:** The spec (Section 10.3) says: "Restore session manager from `checkpoint.sessionMap`." The `Checkpoint` interface contains a `sessionMap: Record<string, string>` field for persisting CC session IDs (keyed by `threadId`). However, the runner always saves `sessionMap: {}` (empty) at every checkpoint. The `SessionManager` instance lives inside `CodergenHandler` and has no connection to the runner's checkpoint-saving logic. On resume, `checkpoint.sessionMap` is loaded but nothing in the runner applies it anywhere. Result: pipelines using `full` fidelity with shared thread IDs will lose their CC session continuity on crash/resume — the resumed nodes start fresh CC sessions instead of continuing the conversation. The spec also notes that for the first node after resume, `full` fidelity should degrade to `summary:high` (Section 10.3, step 6), which is also not implemented.
-- **Recommendation:** Thread `SessionManager` into `RunConfig` (add `sessionManager?: SessionManager`). In `run()`: (a) create a `SessionManager` and pass it in `RunConfig` if not provided, (b) pass the session manager to `CodergenHandler` via the registry setup step or directly in RunConfig, (c) populate `sessionMap: sessionManager.snapshot()` when saving checkpoints, (d) call `sessionManager.restore(checkpoint.sessionMap)` when resuming. Also implement the fidelity degradation for the first node after resume.
-- **Fix:** Added `sessionManager?: SessionManager` to `RunConfig`. `run()` now creates a `SessionManager` from config or new, calls `sessionManager.restore(checkpoint.sessionMap)` on resume, and uses `sessionManager.snapshot()` when saving both mid-run and final checkpoints. `cli.ts` now creates a shared `SessionManager`, constructs `CodergenHandler` with it, and passes both `sessionManager` and `registry` to `run()`, establishing the connection between the handler and the checkpoint system. Two new tests added to `runner.test.ts` verify save and restore. Fidelity degradation for first-node-after-resume remains unimplemented (deferred).
-
----
-
-### FINDING-002: WaitForHumanHandler returns "fail" on unrecognized answer instead of defaulting to first choice
-
-- **Severity:** MEDIUM
-- **Category:** Spec Compliance / Correctness
-- **Status:** RESOLVED
-- **File(s):** `src/handlers/wait-human.ts:86-97`
-- **Description:** The spec (Section 9.7) says when no choice matches the user's answer, fall back to the first choice: `choices.find(...) ?? choices[0]`. The implementation instead returns `{ status: "fail", failureReason: "Unknown choice: ..." }`. This means if a user types an unrecognized response (a typo, or the full label instead of the accelerator key, or anything the matching logic doesn't handle), the human gate immediately fails and the pipeline takes the failure path. The spec's intent is that an unrecognized answer gracefully defaults to the first available choice, allowing pipelines to continue.
-- **Recommendation:** Change the not-found branch to return the first-choice result instead of fail:
+- **Status:** OPEN
+- **File(s):** `src/cli.ts:134-137`
+- **Description:** The CLI creates a `HandlerRegistry` and only calls `registry.register("codergen", new CodergenHandler(sessionManager))`. The `ToolHandler`, `ParallelHandler`, and `FanInHandler` classes exist and are correct but are never instantiated or registered anywhere in the CLI. When the execution engine resolves a handler for a `tool` node (shape `parallelogram`) or `parallel` node (shape `component`), it falls through to the default mock handler which returns `{ status: "success" }` without executing anything. Effect: (a) Tool pipelines silently skip all shell command execution and report success; (b) Parallel pipelines never fan out — they return success without executing any branches. A user who builds a pipeline with `tool` or `parallel` nodes and runs `attractor run` will get incorrect results with no warning. The `FanInHandler` is also unregistered; since parallel never ran, fan-in also gets no meaningful results.
+- **Recommendation:** In `cmdRun` in `cli.ts`, after creating the registry, also register the missing handlers:
   ```typescript
-  const selected = choices.find(...) ?? choices[0];
-  // then return { status: "success", suggestedNextIds: [selected.to], ... }
+  import { ToolHandler } from "./handlers/tool.js";
+  import { ParallelHandler } from "./handlers/parallel.js";
+  import { FanInHandler } from "./handlers/fan-in.js";
+  import { ConditionalHandler } from "./handlers/conditional.js";
+  // ...
+  registry.register("tool", new ToolHandler());
+  registry.register("parallel", new ParallelHandler(registry));
+  registry.register("parallel.fan_in", new FanInHandler());
+  registry.register("conditional", new ConditionalHandler());
   ```
-- **Fix:** Changed `choices.find(...) ?? choices[0]` — the `if (!selected)` fail branch was removed and `choices[0]` is now used as the nullish-coalescing fallback. Added a test covering the unrecognized answer case. 240 tests pass.
+  Note: `ConditionalHandler` behaves identically to the mock (returns success), so it is lower priority, but registering it keeps the intent explicit and future-proofs the code.
 
 ---
 
-### FINDING-003: WaitForHumanHandler returns "fail" on timeout/skip without default instead of "retry"
+### FINDING-002: PipelineEvent union type missing cc_event and error variants
 
 - **Severity:** MEDIUM
 - **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/handlers/wait-human.ts:78-83`
-- **Description:** The spec (Section 9.7) says: `return { status: "retry", failureReason: "Human gate timeout, no default" }` when `TIMEOUT` or `SKIPPED` is received and no `human.default_choice` is configured. The implementation returns `{ status: "fail", failureReason: "Human gate timed out or was skipped with no default choice" }`. With `"retry"` status, nodes that have `max_retries > 0` would re-prompt the human. With `"fail"`, the pipeline immediately routes to the fail path. For fully unattended pipelines with human gates and no defaults configured, this causes immediate failure instead of giving the human a second chance.
-- **Recommendation:** Change the return value to `{ status: "retry", failureReason: "Human gate timed out or was skipped with no default choice" }` to match the spec.
-- **Fix:** Changed `status: "fail"` to `status: "retry"` and updated the `failureReason` message to match the spec. Added a test covering SKIPPED with no default. 241 tests pass.
-
----
-
-### FINDING-004: cmdRun validates graph before transforms are applied
-
-- **Severity:** MEDIUM
-- **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/cli.ts:87-97`
-- **Description:** The spec (Section 15, `attractor run` steps 1-3) specifies: "1. Read and parse the DOT file. 2. Apply transforms. 3. Validate." In `cmdRun`, `validate(graph)` is called at line 90 before `run()`, which applies transforms internally. So validation happens on the untransformed graph: `$goal` placeholders have not been expanded in node prompts, and stylesheet rules have not been applied. A stylesheet syntax validation would still catch problems (since `stylesheetSyntaxRule` re-parses the stylesheet string). However, the validation results are technically operating on a different state than what the engine will actually use, which is confusing and may give incorrect results as new rules are added.
-- **Recommendation:** Call `applyTransforms(graph)` in `cmdRun` before `validate()`. Since `applyTransforms` is idempotent (the second call inside `run()` is a no-op), double application is safe. Update the comment at line 87 accordingly.
-- **Fix:** Added `applyTransforms(graph)` call between `parse()` and `validate()` in `cmdRun`. Updated the comment to explain that `applyTransforms` is idempotent so the second call inside `run()` is a no-op. All 241 tests pass.
-
----
-
-### FINDING-005: cc-backend missing default model and maxTurns
-
-- **Severity:** LOW
-- **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/backend/cc-backend.ts:47-66`
-- **Description:** The spec (Section 7.2) specifies that the `query()` call should use `model: options.model ?? "claude-sonnet-4-5-20250514"` and `maxTurns: options.maxTurns ?? 200` as defaults. The implementation only sets `model`, `maxTurns`, and `effort` if they are explicitly provided (`if (options.model !== undefined) queryOptions.model = options.model`). When not provided, the CC SDK uses its own internal defaults, which may differ from the spec's intended defaults. In particular, if the SDK defaults to a different model or a lower turn limit, pipeline behavior could differ unexpectedly.
-- **Recommendation:** Apply the spec's defaults: `queryOptions.model = options.model ?? "claude-sonnet-4-5-20250514"` and `queryOptions.maxTurns = options.maxTurns ?? 200`. Effort can remain conditional since `"high"` may already be the SDK default.
-- **Fix:** Replaced conditional `if (options.model !== undefined)` and `if (options.maxTurns !== undefined)` assignments with `queryOptions.model = options.model ?? "claude-sonnet-4-5-20250514"` and `queryOptions.maxTurns = options.maxTurns ?? 200`. Added a test verifying defaults are applied when neither option is specified. 242 tests pass.
-
----
-
-### FINDING-006: parseStatusFile defaults invalid/missing outcome to "fail" instead of "success"
-
-- **Severity:** LOW
-- **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/handlers/codergen.ts:73-86`
-- **Description:** The spec (Section 9.5) shows `parseStatusFile` as returning `status: parseStageStatus(obj.outcome as string) ?? "success"` — defaulting to `"success"` when the outcome field is missing or unrecognized. The implementation defaults to `"fail"`. A CC agent that writes a status file with `{ "outcome": "done" }` (invalid status string) will get `"fail"` in the implementation but `"success"` in the spec. More significantly, if the `outcome` field is missing entirely, the spec treats it as success while the implementation fails the node. The spec's fallback-to-CC-success path (the `catch` block) only handles the case where the file itself can't be read or parsed, not where `outcome` is absent/invalid.
-- **Recommendation:** Change the default in the `else` branch from `"fail"` to `"success"` to match the spec: if the CC agent wrote a parseable status file but omitted the `outcome` field, treat it as success.
-- **Fix:** Changed `status = "fail"` to `status = "success"` in the unrecognized-outcome `else` branch of `parseStatusFile`. Added two tests: one verifying a missing `outcome` field defaults to `"success"`, another verifying an unrecognized string (e.g. `"done"`) also defaults to `"success"`. 244 tests pass.
-
----
-
-### FINDING-007: parallel.ts does not emit event warning for unrecognized join_policy
-
-- **Severity:** LOW
-- **Category:** Spec Compliance
-- **Status:** RESOLVED
-- **File(s):** `src/handlers/parallel.ts:88-91`
-- **Description:** The Phase 8 spec says: "If an unrecognized join policy is encountered, treat it as `wait_all` and emit a warning via `config.onEvent`." The implementation silently treats unrecognized values as `wait_all` without any event or log. While there is no `"warning"` event type defined in `PipelineEvent`, the spec's intent is to make the fallback visible. Users who misconfigure `join_policy="k_of_n"` (which is listed in the source spec but deferred) would get silent fallback to `wait_all` with no indication.
-- **Recommendation:** When `joinPolicy` is neither `"wait_all"` nor `"first_success"`, write a message to `process.stderr` or emit a custom event, so the operator knows the configured policy was not honored.
-- **Fix:** When `joinPolicy` is an unrecognized value, `process.stderr.write()` is now called with a message including the node ID, the unrecognized policy name, and the fallback policy. A test verifies the warning is emitted and that behavior falls back to `wait_all`. 245 tests pass.
-
----
-
-### FINDING-008: evaluator.ts resolveKey treats empty context value as "not found"
-
-- **Severity:** TRIVIAL
-- **Category:** Correctness
-- **Status:** RESOLVED
-- **File(s):** `src/conditions/evaluator.ts:12-16`
-- **Description:** In `resolveKey`, when a key starts with `"context."`:
+- **Status:** OPEN
+- **File(s):** `src/model/events.ts:17-30`
+- **Description:** The spec (Section 16.1) defines the full `PipelineEvent` union including:
   ```typescript
-  const full = context.getString(key);
-  if (full !== "") return full;
-  return context.getString(key.slice(8));
+  | { kind: "cc_event"; nodeId: string; event: SDKMessage; timestamp: number }
+  | { kind: "error"; message: string; nodeId?: string; timestamp: number }
   ```
-  If the context explicitly contains the key `context.foo` with value `""` (empty string), the condition `full !== ""` is false, so it falls through and tries `context.getString("foo")` instead. This means a key explicitly set to `""` is indistinguishable from a missing key — the fallback fires incorrectly. In practice, pipeline stages rarely set empty-string context values, but it is a correctness gap.
-- **Recommendation:** Use `context.has(key)` instead of checking for non-empty string: `if (context.has(key)) return context.getString(key);`.
-- **Fix:** Replaced `const full = context.getString(key); if (full !== "") return full;` with `if (context.has(key)) return context.getString(key);`. Added a test verifying that when `context.flag` is explicitly set to `""` and `flag` is set to `"yes"`, the condition `context.flag=yes` correctly evaluates to false and `context.flag=` evaluates to true. 246 tests pass.
+  Neither variant is present in the current `events.ts`. This means: (a) TypeScript consumers of the `PipelineEvent` type cannot write exhaustive switch handlers for all event types; (b) any code that tries to emit these events will fail type-checking; (c) the spec's observability contract for CC SDK message forwarding cannot be met without first extending the type. The `error` event type in particular is useful for surfacing runtime errors to monitoring callers without crashing the pipeline.
+- **Recommendation:** Add both variants to the `PipelineEvent` union. The `error` variant has no external dependencies and can be added immediately. The `cc_event` variant requires importing `SDKMessage` from `@anthropic-ai/claude-agent-sdk`; since `cc-backend.ts` already imports this, the import can be copied to `events.ts` (or the type re-exported from there).
+
+---
+
+### FINDING-003: stage_retrying event is defined but never emitted
+
+- **Severity:** LOW
+- **Category:** Spec Compliance / Test Quality
+- **Status:** OPEN
+- **File(s):** `src/engine/retry.ts:49-88`, `src/model/events.ts:23`
+- **Description:** The spec (Section 16.1) defines `stage_retrying` with fields `nodeId`, `attempt`, `delayMs`, `timestamp`. The event type is present in `events.ts`. However, `executeWithRetry` in `retry.ts` never calls `config.onEvent` to emit this event during retry loops. Monitoring code that subscribes to pipeline events to track retry behavior will never see these events. Tests do not cover the emission of this event. The issue is structural: `executeWithRetry` receives `config: RunConfig` which has `onEvent`, so it has access to emit the event.
+- **Recommendation:** In the retry loop within `executeWithRetry`, after computing `delay` and before sleeping, emit:
+  ```typescript
+  config.onEvent?.({
+    kind: "stage_retrying",
+    nodeId: node.id,
+    attempt,
+    delayMs: delay,
+    timestamp: Date.now(),
+  });
+  ```
+  Add a test that verifies `stage_retrying` events are emitted with correct `attempt` and `delayMs` fields.
+
+---
+
+### FINDING-004: human_question and human_answer events never emitted by WaitForHumanHandler
+
+- **Severity:** LOW
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/handlers/wait-human.ts:29-102`
+- **Description:** The spec (Section 16.1) defines `human_question` and `human_answer` pipeline events. The `WaitForHumanHandler.execute()` receives `config: RunConfig` (aliased as `_config`) but never calls `config.onEvent`. As a result: (a) monitoring callers cannot observe when the pipeline pauses for human input; (b) the CLI's `formatEvent` handler at `src/cli.ts:49` handles `human_question` but would never receive it; (c) users building automated test harnesses around pipeline events cannot detect human gate prompts. The `Question` and `Answer` types needed for these events are already defined and imported in the file.
+- **Recommendation:** Rename `_config` to `config` in the parameter list and add event emission:
+  ```typescript
+  config.onEvent?.({ kind: "human_question", question, timestamp: Date.now() });
+  const answer = await this.interviewer.ask(question);
+  config.onEvent?.({ kind: "human_answer", answer, timestamp: Date.now() });
+  ```
+
+---
+
+### FINDING-005: CodergenHandler doesn't forward CC SDK messages as cc_event pipeline events
+
+- **Severity:** LOW
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/handlers/codergen.ts:183`
+- **Description:** The spec (Section 9.5) says the codergen handler should call `runCC(prompt, ccOptions, (event) => { config.onEvent?.({kind: "cc_event", nodeId: node.id, event, timestamp: Date.now()}) })`. The implementation calls `runCC(finalPrompt, ccOptions)` without the third `onEvent` callback argument. CC SDK messages (assistant messages, tool uses, progress) are silently dropped. Users who subscribe to pipeline events to observe CC execution in real time (e.g., for streaming output to a UI) receive nothing. This is coupled with FINDING-002: even after adding the callback, the `cc_event` type would need to be in the `PipelineEvent` union before it can be safely emitted.
+- **Recommendation:** Pass the event callback as the third argument to `runCC`:
+  ```typescript
+  const ccResult = await runCC(finalPrompt, ccOptions, (sdkEvent) => {
+    config.onEvent?.({ kind: "cc_event", nodeId: node.id, event: sdkEvent, timestamp: Date.now() });
+  });
+  ```
+  This is blocked by FINDING-002; fix that first.
+
+---
+
+### FINDING-006: index.ts missing exports for handler classes and registry
+
+- **Severity:** LOW
+- **Category:** Integration / Public API
+- **Status:** OPEN
+- **File(s):** `src/index.ts`
+- **Description:** The public API exported from `src/index.ts` includes `run`, `validate`, `parse`, and the interviewer classes, but omits: `HandlerRegistry`, `CodergenHandler`, `ToolHandler`, `WaitForHumanHandler`, `ParallelHandler`, `FanInHandler`, `ConditionalHandler`, `SessionManager`, and `applyTransforms`. An external consumer who imports `attractor` as a library and wants to build a custom pipeline using these classes must reach into internal module paths (e.g., `attractor/src/handlers/registry.js`) which breaks encapsulation and will fail when the package is compiled to `dist/`. The CLI workaround (importing directly) works only in the monorepo context.
+- **Recommendation:** Add to `src/index.ts`:
+  ```typescript
+  export { HandlerRegistry } from "./handlers/registry.js";
+  export { CodergenHandler } from "./handlers/codergen.js";
+  export { ToolHandler } from "./handlers/tool.js";
+  export { ParallelHandler, executeBranch } from "./handlers/parallel.js";
+  export { FanInHandler } from "./handlers/fan-in.js";
+  export { WaitForHumanHandler } from "./handlers/wait-human.js";
+  export { ConditionalHandler } from "./handlers/conditional.js";
+  export { SessionManager } from "./backend/session-manager.js";
+  export { applyTransforms } from "./engine/transforms.js";
+  export type { Handler } from "./handlers/registry.js";
+  ```
+
+---
+
+### FINDING-007: Fidelity degradation for first node after resume not implemented
+
+- **Severity:** LOW
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:112-130`
+- **Description:** The spec (Section 10.3, step 6) states: "For the first node after resume, if it was using `full` fidelity, degrade to `summary:high` because in-memory CC sessions cannot be serialized." The resume logic in `runner.ts` correctly restores the session map and sets `currentNode` but does not implement fidelity degradation. In practice this may not matter (the CC SDK persists sessions to disk and `resume: sessionId` reconstructs the session), but it is a documented spec deviation. This was previously noted as deferred in review cycle 2 FINDING-001 but remains unimplemented.
+- **Recommendation:** After restoring the session manager in the resume block, track a `firstNodeAfterResume` flag:
+  ```typescript
+  let firstNodeAfterResume = true;
+  ```
+  Then in CodergenHandler (or by passing the flag via RunConfig), when `firstNodeAfterResume && fidelity === "full"`, override fidelity to `"summary:high"` for that one node call and clear the flag. Alternatively, degrade in the resume block by calling `sessionManager.clear()` and relying on preamble generation.
 
 ---
 
 ## Statistics
 
-- Total findings: 8
+- Total findings: 7
 - Critical: 0
-- High: 1 (RESOLVED)
-- Medium: 3 (RESOLVED)
-- Low: 3 (2 RESOLVED, 1 RESOLVED)
-- Trivial: 1 (RESOLVED)
+- High: 1 (OPEN)
+- Medium: 1 (OPEN)
+- Low: 5 (OPEN)
+- Trivial: 0
