@@ -10,8 +10,7 @@ export function resolveKey(
   if (key === "outcome") return outcome.status ?? "";
   if (key === "preferred_label") return outcome.preferredLabel ?? "";
   if (key.startsWith("context.")) {
-    const full = context.getString(key);
-    if (full !== "") return full;
+    if (context.has(key)) return context.getString(key);
     return context.getString(key.slice(8));
   }
   return context.getString(key);

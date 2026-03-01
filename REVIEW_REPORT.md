@@ -104,7 +104,7 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 
 - **Severity:** TRIVIAL
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/conditions/evaluator.ts:12-16`
 - **Description:** In `resolveKey`, when a key starts with `"context."`:
   ```typescript
@@ -114,6 +114,7 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
   ```
   If the context explicitly contains the key `context.foo` with value `""` (empty string), the condition `full !== ""` is false, so it falls through and tries `context.getString("foo")` instead. This means a key explicitly set to `""` is indistinguishable from a missing key — the fallback fires incorrectly. In practice, pipeline stages rarely set empty-string context values, but it is a correctness gap.
 - **Recommendation:** Use `context.has(key)` instead of checking for non-empty string: `if (context.has(key)) return context.getString(key);`.
+- **Fix:** Replaced `const full = context.getString(key); if (full !== "") return full;` with `if (context.has(key)) return context.getString(key);`. Added a test verifying that when `context.flag` is explicitly set to `""` and `flag` is set to `"yes"`, the condition `context.flag=yes` correctly evaluates to false and `context.flag=` evaluates to true. 246 tests pass.
 
 ---
 
@@ -124,4 +125,4 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 - High: 1 (RESOLVED)
 - Medium: 3 (RESOLVED)
 - Low: 3 (2 RESOLVED, 1 RESOLVED)
-- Trivial: 1 (OPEN)
+- Trivial: 1 (RESOLVED)

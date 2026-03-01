@@ -147,4 +147,13 @@ describe("condition evaluator", () => {
   it("bare key truthy check: missing = false", () => {
     expect(evaluateCondition("context.has_flag", { status: "success" }, new Context())).toBe(false);
   });
+
+  it("resolveKey does not fall through when context.key is explicitly empty string", () => {
+    // When the full key "context.flag" exists with value "", it should return ""
+    // not fall through to look up "flag" which might have a different value
+    const ctx = makeContext({ "context.flag": "", "flag": "yes" });
+    // "context.flag" resolves to "" (not "yes")
+    expect(evaluateCondition("context.flag=yes", { status: "success" }, ctx)).toBe(false);
+    expect(evaluateCondition("context.flag=", { status: "success" }, ctx)).toBe(true);
+  });
 });
