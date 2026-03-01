@@ -16,7 +16,7 @@ The codebase is in excellent shape after six prior review cycles. This seventh-p
 
 - **Severity:** LOW
 - **Category:** Spec Compliance / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/model/fidelity.ts:28-29`
 - **Description:** SPEC.md (lines 1506–1507) and the Phase 4 completion criteria both specify that `resolveThreadId` should resolve node-level `threadId` **before** edge-level `threadId` — i.e., the priority chain is `node > edge > className > previousNodeId > nodeId`. The SPEC.md pseudocode is unambiguous:
   ```typescript
@@ -37,7 +37,7 @@ The codebase is in excellent shape after six prior review cycles. This seventh-p
 
 - **Severity:** LOW
 - **Category:** Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `test/backend/fidelity.test.ts:311-345`
 - **Description:** The two existing `resolveThreadId` tests exercise disjoint cases: (a) node has `threadId`, edge is absent — returns node's value; and (b) node has no `threadId`, edge has `threadId` — returns edge's value. Neither test sets **both** `node.threadId` and `incomingEdge.threadId` simultaneously, so the priority order between them is never verified. This gap allowed review cycle 6's priority inversion (FINDING-001 above) to pass all tests without detection.
 - **Recommendation:** Add a conflict-resolution test to `fidelity.test.ts`:

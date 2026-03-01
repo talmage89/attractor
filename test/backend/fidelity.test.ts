@@ -77,14 +77,14 @@ describe("resolveThreadId", () => {
     expect(resolveThreadId(node, graph, edge)).toBe("edge-thread");
   });
 
-  it("edge threadId takes priority over node threadId", () => {
+  it("returns node threadId over edge threadId (node > edge priority)", () => {
     const node = makeNode({ threadId: "node-thread" });
     const graph = makeGraph();
     const edge: Edge = {
       from: "a", to: "test", label: "", condition: "",
       weight: 0, fidelity: "", threadId: "edge-thread", loopRestart: false,
     };
-    expect(resolveThreadId(node, graph, edge)).toBe("edge-thread");
+    expect(resolveThreadId(node, graph, edge)).toBe("node-thread");
   });
 
   it("derives from className when no explicit thread", () => {
