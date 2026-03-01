@@ -109,7 +109,7 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 
 - **Severity:** LOW
 - **Category:** Integration / Public API
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/index.ts`
 - **Description:** The public API exported from `src/index.ts` includes `run`, `validate`, `parse`, and the interviewer classes, but omits: `HandlerRegistry`, `CodergenHandler`, `ToolHandler`, `WaitForHumanHandler`, `ParallelHandler`, `FanInHandler`, `ConditionalHandler`, `SessionManager`, and `applyTransforms`. An external consumer who imports `attractor` as a library and wants to build a custom pipeline using these classes must reach into internal module paths (e.g., `attractor/src/handlers/registry.js`) which breaks encapsulation and will fail when the package is compiled to `dist/`. The CLI workaround (importing directly) works only in the monorepo context.
 - **Recommendation:** Add to `src/index.ts`:
@@ -149,5 +149,5 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 - Critical: 0
 - High: 1 (RESOLVED)
 - Medium: 1 (RESOLVED)
-- Low: 5 (2 OPEN, 3 RESOLVED)
+- Low: 5 (1 OPEN, 4 RESOLVED)
 - Trivial: 0

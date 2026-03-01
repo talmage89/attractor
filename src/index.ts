@@ -9,3 +9,13 @@ export type { Interviewer, Question, Answer } from "./interviewer/interviewer.js
 export { ConsoleInterviewer } from "./interviewer/console.js";
 export { AutoApproveInterviewer } from "./interviewer/auto-approve.js";
 export { QueueInterviewer } from "./interviewer/queue.js";
+export { HandlerRegistry } from "./handlers/registry.js";
+export type { Handler } from "./handlers/registry.js";
+export { CodergenHandler } from "./handlers/codergen.js";
+export { ToolHandler } from "./handlers/tool.js";
+export { ParallelHandler, executeBranch } from "./handlers/parallel.js";
+export { FanInHandler } from "./handlers/fan-in.js";
+export { WaitForHumanHandler } from "./handlers/wait-human.js";
+export { ConditionalHandler } from "./handlers/conditional.js";
+export { SessionManager } from "./backend/session-manager.js";
+export { applyTransforms } from "./engine/transforms.js";
