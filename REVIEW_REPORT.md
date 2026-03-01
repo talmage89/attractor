@@ -39,7 +39,7 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 
 - **Severity:** MEDIUM
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/model/events.ts:17-30`
 - **Description:** The spec (Section 16.1) defines the full `PipelineEvent` union including:
   ```typescript
@@ -148,6 +148,6 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 - Total findings: 7
 - Critical: 0
 - High: 1 (RESOLVED)
-- Medium: 1 (OPEN)
+- Medium: 1 (RESOLVED)
 - Low: 5 (OPEN)
 - Trivial: 0

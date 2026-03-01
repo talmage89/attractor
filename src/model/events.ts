@@ -1,3 +1,4 @@
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { Outcome } from "./outcome.js";
 
 export interface Question {
@@ -27,4 +28,6 @@ export type PipelineEvent =
   | { kind: "checkpoint_saved"; nodeId: string; timestamp: number }
   | { kind: "parallel_started"; nodeId: string; branchCount: number; timestamp: number }
   | { kind: "parallel_branch_completed"; nodeId: string; branchIndex: number; outcome: Outcome; timestamp: number }
-  | { kind: "parallel_completed"; nodeId: string; successCount: number; failCount: number; timestamp: number };
+  | { kind: "parallel_completed"; nodeId: string; successCount: number; failCount: number; timestamp: number }
+  | { kind: "cc_event"; nodeId: string; event: SDKMessage; timestamp: number }
+  | { kind: "error"; message: string; nodeId?: string; timestamp: number };
