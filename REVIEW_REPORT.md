@@ -105,7 +105,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** MEDIUM
 - **Category:** Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/retry.ts`, `test/engine/`
 - **Description:** There is no `test/engine/retry.test.ts`. The following behaviours are not directly tested:
   1. `delayForAttempt` backoff formula and the 60,000 ms cap.
