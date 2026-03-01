@@ -110,7 +110,7 @@ This is the fourteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** LOW
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/cli.ts:100`, `src/engine/runner.ts:117`
 - **Description:** `cmdRun` calls `applyTransforms(graph)` at line 100, then passes the graph to `run()`. Inside `run()`, `runner.ts:117` calls `applyTransforms(graph)` again on the same mutable graph object. Every transform is applied twice.
 

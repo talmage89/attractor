@@ -97,7 +97,6 @@ async function cmdRun(args: string[]): Promise<void> {
   });
 
   const graph = parse(source as string);
-  applyTransforms(graph);
   const diags = validate(graph);
   const errors = diags.filter((d) => d.severity === "error");
   for (const d of diags) {
