@@ -5,7 +5,6 @@ import * as os from "node:os";
 import { ParallelHandler } from "../../src/handlers/parallel.js";
 import { FanInHandler } from "../../src/handlers/fan-in.js";
 import { HandlerRegistry } from "../../src/handlers/registry.js";
-import { SessionManager } from "../../src/backend/session-manager.js";
 import { parse } from "../../src/parser/parser.js";
 import { Context } from "../../src/model/context.js";
 import type { Handler } from "../../src/handlers/registry.js";
@@ -66,8 +65,7 @@ describe("ParallelHandler", () => {
       branch_b: { status: "success", notes: "B done" },
     });
     const registry = new HandlerRegistry(mock);
-    const sessionManager = new SessionManager();
-    const handler = new ParallelHandler(registry, sessionManager);
+    const handler = new ParallelHandler(registry);
     const ctx = new Context();
     const config = {
       graph, cwd: tmpDir,
@@ -108,7 +106,7 @@ describe("ParallelHandler", () => {
       bad: { status: "fail", failureReason: "broken" },
     });
     const registry = new HandlerRegistry(mock);
-    const handler = new ParallelHandler(registry, new SessionManager());
+    const handler = new ParallelHandler(registry);
 
     const outcome = await handler.execute(
       graph.nodes.get("fork")!, new Context(), graph,
@@ -144,7 +142,7 @@ describe("ParallelHandler", () => {
       bad: { status: "fail" },
     });
     const registry = new HandlerRegistry(mock);
-    const handler = new ParallelHandler(registry, new SessionManager());
+    const handler = new ParallelHandler(registry);
 
     const outcome = await handler.execute(
       graph.nodes.get("fork")!, new Context(), graph,
@@ -167,7 +165,7 @@ describe("ParallelHandler", () => {
     // Manually remove edges from fork for testing
     const isolated = { ...graph, edges: graph.edges.filter(e => e.from !== "fork") };
     const registry = new HandlerRegistry(new MockHandler());
-    const handler = new ParallelHandler(registry, new SessionManager());
+    const handler = new ParallelHandler(registry);
 
     const outcome = await handler.execute(
       graph.nodes.get("fork")!, new Context(), isolated as any,
@@ -209,7 +207,7 @@ describe("ParallelHandler", () => {
     };
 
     const registry = new HandlerRegistry(mock);
-    const handler = new ParallelHandler(registry, new SessionManager());
+    const handler = new ParallelHandler(registry);
 
     await handler.execute(
       graph.nodes.get("fork")!, new Context(), graph,

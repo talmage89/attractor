@@ -116,10 +116,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** LOW
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/parallel.ts:69-73`
 - **Description:** `ParallelHandler`'s constructor takes `private sessionManager: SessionManager` as its second parameter, but `sessionManager` is never referenced in the class body. It's likely a placeholder for future session tracking within parallel branches, but as-is it's dead code.
-- **Recommendation:** Either use the `sessionManager` (e.g., pass it to `executeBranch` if parallel branches need session tracking) or remove the parameter until it is needed.
+- **Fix:** Removed `sessionManager` parameter from the constructor and deleted the `SessionManager` import. Updated all 5 call sites in the test file to pass only `registry`. Also removed the `SessionManager` import from the test file. All 235 tests pass.
 
 ---
 
@@ -184,5 +184,5 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 - Critical: 0
 - High: 2 (all resolved)
 - Medium: 4 (all resolved)
-- Low: 6 (2 resolved, 4 open)
+- Low: 6 (3 resolved, 3 open)
 - Trivial: 3 (all open)
