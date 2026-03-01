@@ -7,6 +7,8 @@ import {
   reachableFrom,
 } from "../model/graph.js";
 import type { Diagnostic } from "./diagnostic.js";
+import { parseCondition } from "../conditions/parser.js";
+import { parseStylesheet } from "../stylesheet/parser.js";
 
 export type LintRule = (graph: Graph) => Diagnostic[];
 
@@ -129,7 +131,9 @@ function conditionSyntaxRule(graph: Graph): Diagnostic[] {
   const diags: Diagnostic[] = [];
   for (const edge of graph.edges) {
     if (!edge.condition) continue;
-    if (!edge.condition.includes("=")) {
+    try {
+      parseCondition(edge.condition);
+    } catch (err) {
       diags.push({
         rule: "condition_syntax",
         severity: "error",
@@ -144,12 +148,14 @@ function conditionSyntaxRule(graph: Graph): Diagnostic[] {
 function stylesheetSyntaxRule(graph: Graph): Diagnostic[] {
   const stylesheet = graph.attributes.modelStylesheet;
   if (!stylesheet) return [];
-  if (!stylesheet.includes("{") || !stylesheet.includes("}")) {
+  try {
+    parseStylesheet(stylesheet);
+  } catch (err) {
     return [
       {
         rule: "stylesheet_syntax",
         severity: "error",
-        message: "Invalid stylesheet syntax: must contain '{' and '}'",
+        message: `Invalid stylesheet syntax: ${err instanceof Error ? err.message : String(err)}`,
       },
     ];
   }

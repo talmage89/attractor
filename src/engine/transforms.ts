@@ -1,0 +1,20 @@
+import type { Graph } from "../model/graph.js";
+import { parseStylesheet } from "../stylesheet/parser.js";
+import { applyStylesheet } from "../stylesheet/applicator.js";
+
+export function applyTransforms(graph: Graph): void {
+  // 1. Variable expansion: replace $goal in node prompts
+  const goal = graph.attributes.goal ?? "";
+  for (const node of graph.nodes.values()) {
+    if (node.prompt.includes("$goal")) {
+      node.prompt = node.prompt.replaceAll("$goal", goal);
+    }
+  }
+
+  // 2. Stylesheet application
+  const stylesheet = graph.attributes.modelStylesheet;
+  if (stylesheet) {
+    const rules = parseStylesheet(stylesheet);
+    applyStylesheet(graph, rules);
+  }
+}
