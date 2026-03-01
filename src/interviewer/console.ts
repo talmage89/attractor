@@ -37,7 +37,7 @@ export class ConsoleInterviewer implements Interviewer {
     }
   }
 
-  inform(message: string, _stage: string): void {
-    console.log(message);
+  inform(message: string, stage: string): void {
+    console.log(`[i] (${stage}) ${message}`);
   }
 }

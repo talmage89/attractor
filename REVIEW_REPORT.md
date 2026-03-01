@@ -118,7 +118,7 @@ The most actionable findings are the three test gaps (FINDING-001 through FINDIN
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/interviewer/console.ts`
 - **Description:** The spec's `ConsoleInterviewer.inform()` description shows the output format as `[i] (${stage}) ${message}`. The implementation is:
 
