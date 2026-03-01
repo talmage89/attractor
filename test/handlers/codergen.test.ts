@@ -595,15 +595,17 @@ describe("parseStatusFile", () => {
     expect(outcome.suggestedNextIds).toEqual(["a", "b", "c"]);
   });
 
-  it("defaults to success when outcome field is missing", () => {
+  it("defaults to fail when outcome field is missing", () => {
     const data = { notes: "did stuff" };
     const outcome = parseStatusFile(data, "test");
-    expect(outcome.status).toBe("success");
+    expect(outcome.status).toBe("fail");
+    expect(outcome.failureReason).toContain("Missing or unrecognised outcome field");
   });
 
-  it("defaults to success when outcome field is an unrecognized string", () => {
+  it("defaults to fail when outcome field is an unrecognized string", () => {
     const data = { outcome: "done" };
     const outcome = parseStatusFile(data, "test");
-    expect(outcome.status).toBe("success");
+    expect(outcome.status).toBe("fail");
+    expect(outcome.failureReason).toContain("Missing or unrecognised outcome field");
   });
 });

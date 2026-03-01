@@ -73,6 +73,7 @@ export function parseStatusFile(data: unknown, nodeId: string): Outcome {
   const outcomeStr = typeof obj.outcome === "string" ? obj.outcome : undefined;
 
   let status: StageStatus;
+  let defaultedFailReason: string | undefined;
   if (
     outcomeStr === "success" ||
     outcomeStr === "retry" ||
@@ -82,7 +83,8 @@ export function parseStatusFile(data: unknown, nodeId: string): Outcome {
   ) {
     status = outcomeStr as StageStatus;
   } else {
-    status = "success";
+    status = "fail";
+    defaultedFailReason = "Missing or unrecognised outcome field in status.json";
   }
 
   const result: Outcome = { status };
@@ -107,7 +109,8 @@ export function parseStatusFile(data: unknown, nodeId: string): Outcome {
 
   if (status === "fail") {
     result.failureReason =
-      typeof obj.notes === "string" ? obj.notes : `Node ${nodeId} failed`;
+      defaultedFailReason ??
+      (typeof obj.notes === "string" ? obj.notes : `Node ${nodeId} failed`);
   }
 
   return result;

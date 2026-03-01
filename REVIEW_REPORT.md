@@ -157,7 +157,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:73-86`
 - **Description:** When an LLM writes `"outcome": "done"` or omits the field entirely, `parseStatusFile` silently returns `status: 'success'`:
   ```typescript
@@ -168,6 +168,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
   A missing or unrecognised outcome should arguably default to `'fail'` (requiring explicit success) rather than silently succeeding and allowing the pipeline to continue as if work completed correctly.
 
 - **Recommendation:** Change the default to `status = 'fail'` with `failureReason: 'Missing or unrecognised outcome field in status.json'`. Alternatively keep the current default but emit a `warning` pipeline event so operators are notified. Update the test that currently asserts the `'success'` default.
+- **Resolution:** Changed default from `status = 'success'` to `status = 'fail'` with `defaultedFailReason = 'Missing or unrecognised outcome field in status.json'`. Updated `failureReason` logic to use this specific message when the outcome was defaulted. Updated the two test cases that asserted the old `'success'` default to now assert `'fail'` with the new `failureReason`. 302 tests passing.
 
 ---
 
