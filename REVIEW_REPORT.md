@@ -55,7 +55,7 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 
 - **Severity:** LOW
 - **Category:** Spec Compliance / Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/retry.ts:49-88`, `src/model/events.ts:23`
 - **Description:** The spec (Section 16.1) defines `stage_retrying` with fields `nodeId`, `attempt`, `delayMs`, `timestamp`. The event type is present in `events.ts`. However, `executeWithRetry` in `retry.ts` never calls `config.onEvent` to emit this event during retry loops. Monitoring code that subscribes to pipeline events to track retry behavior will never see these events. Tests do not cover the emission of this event. The issue is structural: `executeWithRetry` receives `config: RunConfig` which has `onEvent`, so it has access to emit the event.
 - **Recommendation:** In the retry loop within `executeWithRetry`, after computing `delay` and before sleeping, emit:
@@ -149,5 +149,5 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 - Critical: 0
 - High: 1 (RESOLVED)
 - Medium: 1 (RESOLVED)
-- Low: 5 (OPEN)
+- Low: 5 (4 OPEN, 1 RESOLVED)
 - Trivial: 0

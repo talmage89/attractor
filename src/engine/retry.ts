@@ -53,6 +53,7 @@ export async function executeWithRetry(
     } catch (error: unknown) {
       if (attempt < policy.maxAttempts) {
         const delay = delayForAttempt(attempt, policy);
+        config.onEvent?.({ kind: "stage_retrying", nodeId: node.id, attempt, delayMs: delay, timestamp: Date.now() });
         await sleep(delay);
         continue;
       }
@@ -67,6 +68,7 @@ export async function executeWithRetry(
     if (outcome.status === "retry") {
       if (attempt < policy.maxAttempts) {
         const delay = delayForAttempt(attempt, policy);
+        config.onEvent?.({ kind: "stage_retrying", nodeId: node.id, attempt, delayMs: delay, timestamp: Date.now() });
         await sleep(delay);
         continue;
       } else {

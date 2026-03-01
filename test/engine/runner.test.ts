@@ -227,6 +227,48 @@ describe("execution engine", () => {
     expect(result.status).toBe("success");
   });
 
+  it("emits stage_retrying events with correct attempt and delayMs fields", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test retry events"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box, max_retries=1]
+        s -> a -> e
+      }
+    `);
+
+    let callCount = 0;
+    const retryOnceHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        callCount++;
+        return callCount === 1 ? { status: "retry" } : { status: "success" };
+      },
+    };
+    const registry = new HandlerRegistry(retryOnceHandler);
+    const events: PipelineEvent[] = [];
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+      onEvent: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe("success");
+
+    const retryingEvents = events.filter(e => e.kind === "stage_retrying");
+    expect(retryingEvents).toHaveLength(1);
+    const evt = retryingEvents[0] as Extract<PipelineEvent, { kind: "stage_retrying" }>;
+    expect(evt.nodeId).toBe("a");
+    expect(evt.attempt).toBe(1);
+    expect(typeof evt.delayMs).toBe("number");
+    expect(evt.delayMs).toBeGreaterThan(0);
+    expect(typeof evt.timestamp).toBe("number");
+  });
+
   it("FAIL does NOT trigger retry", async () => {
     const graph = parse(`
       digraph G {
