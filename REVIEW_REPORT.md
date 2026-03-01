@@ -20,7 +20,7 @@ The most actionable findings are the three test gaps (FINDING-001 through FINDIN
 
 - **Severity:** MEDIUM
 - **Category:** Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `test/validation/validator.test.ts`, `src/validation/rules.ts`
 - **Description:** `validator.test.ts` has dedicated `describe` blocks for 11 of the 14 implemented validation rules. `conditionSyntaxRule`, `stylesheetSyntaxRule`, and `retryTargetExistsRule` are all absent. For `conditionSyntaxRule` specifically, the rule is the primary guard against malformed condition expressions reaching `evaluateCondition` at runtime. Without a test, a regression that silently swallows parse errors in condition syntax would go undetected. The rule implementation is:
 
@@ -45,7 +45,7 @@ The most actionable findings are the three test gaps (FINDING-001 through FINDIN
 
 - **Severity:** MEDIUM
 - **Category:** Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `test/validation/validator.test.ts`, `src/validation/rules.ts`
 - **Description:** `stylesheetSyntaxRule` validates the `model_stylesheet` graph attribute by calling `parseStylesheet`. A malformed stylesheet that reaches `applyTransforms` would throw at runtime. No dedicated test exists for this rule. The rule is implemented and reachable, but is not exercised in isolation.
 
@@ -57,7 +57,7 @@ The most actionable findings are the three test gaps (FINDING-001 through FINDIN
 
 - **Severity:** MEDIUM
 - **Category:** Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `test/validation/validator.test.ts`, `src/validation/rules.ts`
 - **Description:** `retryTargetExistsRule` checks that any `retry_target` attribute on a node references a node ID that exists in the graph. An invalid `retry_target` would cause `graph.nodes.get(retryTarget)` to return `undefined` inside `resolveRetryTarget`, which would silently skip the goal-gate retry — a subtle failure mode. No test exists for this rule.
 

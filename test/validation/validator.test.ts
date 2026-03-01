@@ -443,6 +443,109 @@ describe("validation", () => {
     });
   });
 
+  describe("conditionSyntaxRule", () => {
+    it("does not flag edges with no condition", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "condition_syntax");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not flag a valid condition string", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "a", label: "", condition: "outcome=success", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "condition_syntax");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("produces an error diagnostic for a syntactically invalid condition", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "a", label: "", condition: "=success", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "condition_syntax");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("error");
+      expect(rule[0].edge).toEqual({ from: "s", to: "a" });
+    });
+  });
+
+  describe("stylesheetSyntaxRule", () => {
+    it("does not flag a valid stylesheet", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("e", { shape: "Msquare" }),
+      ]);
+      graph.attributes.modelStylesheet = "* { llm_model: claude-3 }";
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "stylesheet_syntax");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("produces an error diagnostic for a syntactically invalid stylesheet", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("e", { shape: "Msquare" }),
+      ]);
+      graph.attributes.modelStylesheet = "invalid syntax";
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "stylesheet_syntax");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("error");
+    });
+  });
+
+  describe("retryTargetExistsRule", () => {
+    it("does not flag a node whose retry_target references an existing node", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A", retryTarget: "s" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "retry_target_exists");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("produces a warning diagnostic for a retry_target that references a nonexistent node", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A", retryTarget: "nonexistent" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "retry_target_exists");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].nodeId).toBe("a");
+    });
+  });
+
   describe("validateOrThrow", () => {
     it("throws on error-severity diagnostics", () => {
       const graph = parse(`
