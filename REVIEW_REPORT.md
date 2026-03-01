@@ -41,7 +41,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/parallel.ts:140-171`
 - **Description:** When parallel branches contain codergen nodes, each branch accumulates `costUsd` in its `Outcome`. `ParallelHandler.execute` discards all branch outcomes after recording counts/statuses — it never sums `costUsd`:
 

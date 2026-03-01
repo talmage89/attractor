@@ -168,6 +168,11 @@ export class ParallelHandler implements Handler {
       status = anySuccess ? "success" : "fail";
     }
 
-    return { status, contextUpdates };
+    const totalBranchCostUsd = results.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+    return {
+      status,
+      contextUpdates,
+      ...(totalBranchCostUsd > 0 ? { costUsd: totalBranchCostUsd } : {}),
+    };
   }
 }

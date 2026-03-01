@@ -221,6 +221,75 @@ describe("ParallelHandler", () => {
     expect(warningEvent.message).toContain("wait_all");
   });
 
+  it("aggregates costUsd from branch outcomes", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test cost aggregation"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component]
+        branch_a [shape=box, prompt="A"]
+        branch_b [shape=box, prompt="B"]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> branch_a
+        fork -> branch_b
+        branch_a -> join
+        branch_b -> join
+        join -> e
+      }
+    `);
+
+    const mock = new MockHandler({
+      branch_a: { status: "success", costUsd: 0.05 },
+      branch_b: { status: "success", costUsd: 0.03 },
+    });
+    const registry = new HandlerRegistry(mock);
+    const handler = new ParallelHandler(registry);
+    const ctx = new Context();
+    const config = {
+      graph, cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+    };
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, ctx, graph, config as any
+    );
+
+    expect(outcome.status).toBe("success");
+    expect(outcome.costUsd).toBeCloseTo(0.08);
+  });
+
+  it("omits costUsd when branches report no cost", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test no cost"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component]
+        branch_a [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> branch_a
+        branch_a -> join
+        join -> e
+      }
+    `);
+
+    const mock = new MockHandler({ branch_a: { status: "success" } });
+    const registry = new HandlerRegistry(mock);
+    const handler = new ParallelHandler(registry);
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, new Context(), graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(outcome.status).toBe("success");
+    expect(outcome.costUsd).toBeUndefined();
+  });
+
   it("respects max_parallel concurrency limit", async () => {
     const graph = parse(`
       digraph G {
