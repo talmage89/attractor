@@ -52,7 +52,7 @@ The codebase continues to be in excellent shape after eight prior review cycles.
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:229-232`
 - **Description:** The comment at line 229 reads "if autoStatus and outcome status is somehow undefined, default to success". The check `!outcome.status` can never be true at that point:
   - If `status.json` was read successfully, `parseStatusFile` always returns an `Outcome` with a `status` field (defaulting to `"success"` if the field is missing or invalid).
