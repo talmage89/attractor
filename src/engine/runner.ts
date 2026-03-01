@@ -162,6 +162,11 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
   let finalStatus: "success" | "fail" = "success";
 
+  // Counter for goal-gate-driven loop restarts. Capped at defaultMaxRetry to
+  // prevent infinite loops when the retry subgraph never satisfies the gate.
+  let goalGateRetries = 0;
+  const maxGoalGateRetries = graph.attributes.defaultMaxRetry;
+
   // 3. TRAVERSAL LOOP
   loop: while (true) {
     // Build a per-iteration config that includes the incoming edge (so handlers
@@ -234,7 +239,8 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
       if (!gateResult.satisfied && gateResult.failedNode) {
         const retryTarget = resolveRetryTarget(gateResult.failedNode, graph);
-        if (retryTarget) {
+        if (retryTarget && goalGateRetries < maxGoalGateRetries) {
+          goalGateRetries++;
           const retryNode = graph.nodes.get(retryTarget)!;
           currentNode = retryNode;
           // Goal-gate retries jump to a node directly (not via an edge), so

@@ -577,4 +577,41 @@ describe("execution engine", () => {
     // After resume, the session manager should contain the restored session
     expect(sessionManager.getSessionId("main-thread")).toBe("restored-session-456");
   });
+
+  it("goal-gate retry loop is bounded by default_max_retry", async () => {
+    // Pipeline: start -> work -> exit; work has goal_gate=true and always fails;
+    // exit has retry_target pointing back to work. With default_max_retry=2 the
+    // loop should terminate with status "fail" after 2 goal-gate retries.
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test goal gate limit", default_max_retry=2, retry_target="work"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, goal_gate=true]
+        s -> work -> e
+      }
+    `);
+
+    let callCount = 0;
+    const alwaysFailHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        callCount++;
+        return { status: "fail" };
+      },
+    };
+    const registry = new HandlerRegistry(alwaysFailHandler);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    // Pipeline must terminate (not loop forever) with fail status
+    expect(result.status).toBe("fail");
+    // work was executed on the initial pass plus up to maxGoalGateRetries (2) retries = 3 total
+    expect(callCount).toBe(3);
+  });
 });

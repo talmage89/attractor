@@ -31,7 +31,7 @@ The codebase is in excellent shape after four prior review cycles with all previ
 
 - **Severity:** LOW
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:221-231`
 - **Description:** When the terminal node's goal-gate check fails and a `retryTarget` is found, the runner sets `currentNode = retryNode` and continues the traversal loop with no guard on how many times this can happen:
   ```typescript
