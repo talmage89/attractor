@@ -10,6 +10,7 @@ import { HandlerRegistry } from "../handlers/registry.js";
 import type { Handler } from "../handlers/registry.js";
 import { WaitForHumanHandler } from "../handlers/wait-human.js";
 import type { Interviewer } from "../interviewer/interviewer.js";
+import { SessionManager } from "../backend/session-manager.js";
 import { applyTransforms } from "./transforms.js";
 import { validateOrThrow } from "../validation/validator.js";
 import { selectEdge } from "./edge-selection.js";
@@ -26,6 +27,8 @@ export interface RunConfig {
   resumeFromCheckpoint?: string;
   ccPermissionMode?: "default" | "acceptEdits" | "bypassPermissions";
   registry?: HandlerRegistry;
+  /** Session manager for full-fidelity CC session persistence across checkpoints. */
+  sessionManager?: SessionManager;
 }
 
 export interface RunResult {
@@ -80,6 +83,9 @@ export async function run(config: RunConfig): Promise<RunResult> {
   const context = new Context();
   context.set("graph.goal", graph.attributes.goal);
 
+  // Use provided session manager or create a new one for this run
+  const sessionManager = config.sessionManager ?? new SessionManager();
+
   // Use provided registry or create default
   const registry = config.registry ?? new HandlerRegistry(defaultMockHandler);
 
@@ -114,6 +120,8 @@ export async function run(config: RunConfig): Promise<RunResult> {
     for (const [k, v] of Object.entries(checkpoint.contextValues)) {
       context.set(k, v);
     }
+    // Restore session map so full-fidelity CC sessions resume correctly
+    sessionManager.restore(checkpoint.sessionMap);
     // Resume from saved currentNode
     const resumeNode = graph.nodes.get(checkpoint.currentNode);
     if (resumeNode) {
@@ -288,7 +296,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
         nodeOutcomes: Object.fromEntries(nodeOutcomes),
         nodeRetries: {},
         contextValues: context.snapshot(),
-        sessionMap: {},
+        sessionMap: sessionManager.snapshot(),
       },
       config.logsRoot
     );
@@ -321,7 +329,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       nodeOutcomes: Object.fromEntries(nodeOutcomes),
       nodeRetries: {},
       contextValues: context.snapshot(),
-      sessionMap: {},
+      sessionMap: sessionManager.snapshot(),
     },
     config.logsRoot
   );

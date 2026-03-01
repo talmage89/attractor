@@ -8,6 +8,9 @@ import { parse } from "./parser/parser.js";
 import { validate } from "./validation/validator.js";
 import { applyTransforms } from "./engine/transforms.js";
 import { run } from "./engine/runner.js";
+import { HandlerRegistry } from "./handlers/registry.js";
+import { CodergenHandler } from "./handlers/codergen.js";
+import { SessionManager } from "./backend/session-manager.js";
 import { AutoApproveInterviewer } from "./interviewer/auto-approve.js";
 import { ConsoleInterviewer } from "./interviewer/console.js";
 import type { PipelineEvent } from "./model/events.js";
@@ -122,6 +125,15 @@ async function cmdRun(args: string[]): Promise<void> {
     }
   };
 
+  // Build registry with CodergenHandler sharing the same SessionManager that the
+  // runner will use for checkpoint persistence, so full-fidelity CC sessions
+  // survive crash/resume cycles.
+  const sessionManager = new SessionManager();
+  const registry = new HandlerRegistry({
+    async execute() { return { status: "success" }; },
+  });
+  registry.register("codergen", new CodergenHandler(sessionManager));
+
   let result;
   try {
     result = await run({
@@ -132,6 +144,8 @@ async function cmdRun(args: string[]): Promise<void> {
       onEvent,
       resumeFromCheckpoint: values.resume as string | undefined,
       ccPermissionMode: values["permission-mode"] as "default" | "acceptEdits" | "bypassPermissions",
+      registry,
+      sessionManager,
     });
   } catch (err) {
     process.stderr.write(`Error: ${(err as Error).message}\n`);

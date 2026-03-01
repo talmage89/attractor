@@ -8,6 +8,8 @@ import type { PipelineEvent } from "../../src/model/events.js";
 import { HandlerRegistry } from "../../src/handlers/registry.js";
 import type { Handler } from "../../src/handlers/registry.js";
 import type { Outcome } from "../../src/model/outcome.js";
+import { SessionManager } from "../../src/backend/session-manager.js";
+import { saveCheckpoint } from "../../src/model/checkpoint.js";
 
 // Mock handler that returns configurable outcomes
 class MockHandler implements Handler {
@@ -370,5 +372,81 @@ describe("execution engine", () => {
 
     expect(result.status).toBe("success");
     expect(result.completedNodes).toHaveLength(0);
+  });
+
+  it("saves sessionMap from SessionManager into checkpoint", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Session test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a -> e
+      }
+    `);
+
+    // Pre-populate a session manager with a known session
+    const sessionManager = new SessionManager();
+    sessionManager.setSessionId("main-thread", "session-xyz-123");
+
+    const logsRoot = path.join(tmpDir, "logs");
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot,
+      interviewer: noopInterviewer,
+      sessionManager,
+    });
+
+    const checkpoint = JSON.parse(
+      await fs.readFile(path.join(logsRoot, "checkpoint.json"), "utf-8")
+    );
+    expect(checkpoint.sessionMap).toEqual({ "main-thread": "session-xyz-123" });
+  });
+
+  it("restores sessionMap from checkpoint to SessionManager on resume", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Session restore test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        b [shape=box]
+        s -> a -> b -> e
+      }
+    `);
+
+    const logsRoot = path.join(tmpDir, "logs");
+
+    // Save a checkpoint with a non-empty sessionMap
+    await fs.mkdir(logsRoot, { recursive: true });
+    await saveCheckpoint({
+      timestamp: Date.now(),
+      currentNode: "b",
+      completedNodes: ["a"],
+      nodeOutcomes: { a: { status: "success" } },
+      nodeRetries: {},
+      contextValues: { "graph.goal": "Session restore test", outcome: "success" },
+      sessionMap: { "main-thread": "restored-session-456" },
+    }, logsRoot);
+
+    // Resume: the session manager should be populated from the checkpoint
+    const sessionManager = new SessionManager();
+    const registry = new HandlerRegistry({
+      async execute(): Promise<Outcome> { return { status: "success" }; },
+    });
+
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot,
+      interviewer: noopInterviewer,
+      resumeFromCheckpoint: path.join(logsRoot, "checkpoint.json"),
+      registry,
+      sessionManager,
+    });
+
+    // After resume, the session manager should contain the restored session
+    expect(sessionManager.getSessionId("main-thread")).toBe("restored-session-456");
   });
 });

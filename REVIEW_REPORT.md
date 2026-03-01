@@ -16,10 +16,11 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 
 - **Severity:** HIGH
 - **Category:** Spec Compliance / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:283-295`, `src/model/checkpoint.ts:5-13`
 - **Description:** The spec (Section 10.3) says: "Restore session manager from `checkpoint.sessionMap`." The `Checkpoint` interface contains a `sessionMap: Record<string, string>` field for persisting CC session IDs (keyed by `threadId`). However, the runner always saves `sessionMap: {}` (empty) at every checkpoint. The `SessionManager` instance lives inside `CodergenHandler` and has no connection to the runner's checkpoint-saving logic. On resume, `checkpoint.sessionMap` is loaded but nothing in the runner applies it anywhere. Result: pipelines using `full` fidelity with shared thread IDs will lose their CC session continuity on crash/resume — the resumed nodes start fresh CC sessions instead of continuing the conversation. The spec also notes that for the first node after resume, `full` fidelity should degrade to `summary:high` (Section 10.3, step 6), which is also not implemented.
 - **Recommendation:** Thread `SessionManager` into `RunConfig` (add `sessionManager?: SessionManager`). In `run()`: (a) create a `SessionManager` and pass it in `RunConfig` if not provided, (b) pass the session manager to `CodergenHandler` via the registry setup step or directly in RunConfig, (c) populate `sessionMap: sessionManager.snapshot()` when saving checkpoints, (d) call `sessionManager.restore(checkpoint.sessionMap)` when resuming. Also implement the fidelity degradation for the first node after resume.
+- **Fix:** Added `sessionManager?: SessionManager` to `RunConfig`. `run()` now creates a `SessionManager` from config or new, calls `sessionManager.restore(checkpoint.sessionMap)` on resume, and uses `sessionManager.snapshot()` when saving both mid-run and final checkpoints. `cli.ts` now creates a shared `SessionManager`, constructs `CodergenHandler` with it, and passes both `sessionManager` and `registry` to `run()`, establishing the connection between the handler and the checkpoint system. Two new tests added to `runner.test.ts` verify save and restore. Fidelity degradation for first-node-after-resume remains unimplemented (deferred).
 
 ---
 
