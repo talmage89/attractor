@@ -80,10 +80,11 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:73-86`
 - **Description:** The spec (Section 9.5) shows `parseStatusFile` as returning `status: parseStageStatus(obj.outcome as string) ?? "success"` — defaulting to `"success"` when the outcome field is missing or unrecognized. The implementation defaults to `"fail"`. A CC agent that writes a status file with `{ "outcome": "done" }` (invalid status string) will get `"fail"` in the implementation but `"success"` in the spec. More significantly, if the `outcome` field is missing entirely, the spec treats it as success while the implementation fails the node. The spec's fallback-to-CC-success path (the `catch` block) only handles the case where the file itself can't be read or parsed, not where `outcome` is absent/invalid.
 - **Recommendation:** Change the default in the `else` branch from `"fail"` to `"success"` to match the spec: if the CC agent wrote a parseable status file but omitted the `outcome` field, treat it as success.
+- **Fix:** Changed `status = "fail"` to `status = "success"` in the unrecognized-outcome `else` branch of `parseStatusFile`. Added two tests: one verifying a missing `outcome` field defaults to `"success"`, another verifying an unrecognized string (e.g. `"done"`) also defaults to `"success"`. 244 tests pass.
 
 ---
 

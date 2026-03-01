@@ -82,7 +82,7 @@ export function parseStatusFile(data: unknown, nodeId: string): Outcome {
   ) {
     status = outcomeStr as StageStatus;
   } else {
-    status = "fail";
+    status = "success";
   }
 
   const result: Outcome = { status };
