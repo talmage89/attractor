@@ -122,10 +122,8 @@ export class CodergenHandler implements Handler {
     graph: Graph,
     config: RunConfig
   ): Promise<Outcome> {
-    // 1. Build prompt
-    let prompt = node.prompt || node.label || node.id;
-    const goal = graph.attributes?.goal ?? "";
-    prompt = prompt.replace(/\$goal/g, goal);
+    // 1. Build prompt ($goal substitution already done by applyTransforms)
+    const prompt = node.prompt || node.label || node.id;
 
     // 2. Resolve fidelity and session
     // If this is the first node after a checkpoint resume and fidelity is "full",

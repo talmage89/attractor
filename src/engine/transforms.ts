@@ -3,7 +3,9 @@ import { parseStylesheet } from "../stylesheet/parser.js";
 import { applyStylesheet } from "../stylesheet/applicator.js";
 
 export function applyTransforms(graph: Graph): void {
-  // 1. Variable expansion: replace $goal in node prompts
+  // 1. Variable expansion: replace $goal in node prompts.
+  //    This is the canonical (and only) expansion point for $goal — handlers
+  //    must not repeat this substitution.
   const goal = graph.attributes.goal ?? "";
   for (const node of graph.nodes.values()) {
     if (node.prompt.includes("$goal")) {

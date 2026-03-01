@@ -86,7 +86,7 @@ The Attractor codebase is in excellent shape after nine prior review cycles. All
 
 - **Severity:** LOW
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/codergen.ts:128`
 - **Description:** `CodergenHandler.execute` performs `$goal` variable substitution on the node prompt:
 

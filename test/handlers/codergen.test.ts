@@ -14,6 +14,7 @@ import { CodergenHandler } from "../../src/handlers/codergen.js";
 import { SessionManager } from "../../src/backend/session-manager.js";
 import { Context } from "../../src/model/context.js";
 import { parse } from "../../src/parser/parser.js";
+import { applyTransforms } from "../../src/engine/transforms.js";
 import type { CCResult } from "../../src/backend/cc-backend.js";
 
 const mockRunCC = vi.mocked(runCC);
@@ -276,7 +277,7 @@ describe("CodergenHandler", () => {
     expect(prompt).toContain("Do next step");
   });
 
-  it("expands $goal in prompts", async () => {
+  it("expands $goal in prompts (via applyTransforms)", async () => {
     const graph = parse(`
       digraph G {
         graph [goal="Build auth"]
@@ -286,6 +287,8 @@ describe("CodergenHandler", () => {
         s -> work -> e
       }
     `);
+    // applyTransforms is always called by the runner before any handler executes
+    applyTransforms(graph);
 
     mockRunCC.mockResolvedValueOnce(makeCCResult());
 
