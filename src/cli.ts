@@ -193,15 +193,28 @@ async function cmdVisualize(args: string[]): Promise<void> {
   });
 
   const child = spawn("dot", ["-Tsvg"], { stdio: ["pipe", "inherit", "inherit"] });
-  child.on("error", () => {
-    process.stderr.write(
-      "Graphviz not found. Install it with: apt-get install graphviz (or brew install graphviz)\n"
-    );
-    process.exit(3);
+
+  await new Promise<void>((resolve) => {
+    child.on("error", () => {
+      process.stderr.write(
+        "Graphviz not found. Install it with: apt-get install graphviz (or brew install graphviz)\n"
+      );
+      process.exit(3);
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        process.stderr.write(`Error: dot exited with code ${code}\n`);
+        process.exit(3);
+      }
+      resolve();
+    });
+
+    child.stdin?.write(source as string);
+    child.stdin?.end();
   });
 
-  child.stdin?.write(source as string);
-  child.stdin?.end();
+  process.exit(0);
 }
 
 async function main(): Promise<void> {

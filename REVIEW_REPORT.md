@@ -38,10 +38,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** MEDIUM
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/cli.ts:177-205`
 - **Description:** `cmdVisualize` spawns `dot -Tsvg`, pipes DOT source to stdin, and returns. There is no `child.on("close", ...)` handler to wait for `dot` to finish writing SVG to stdout. The function resolves immediately after writing stdin, but `dot` may still be producing output. When `main()` resolves, `process.exit()` is not called from `cmdVisualize` (unlike `cmdRun` and `cmdValidate`), so Node will naturally wait for stdio streams to drain — but this relies on implicit behavior. Additionally, there is no way for the user to know if `dot` exited non-zero (e.g., malformed DOT). A non-zero exit from `dot` is silently ignored.
-- **Recommendation:** Wrap the spawn in a Promise that resolves on `child.on("close")`, checks the exit code, and calls `process.exit()` with an appropriate code. This mirrors the pattern used by `cmdRun` and `cmdValidate`.
+- **Fix:** Wrapped the spawn in a Promise that resolves on `child.on("close")`, checks the exit code, and calls `process.exit(3)` on non-zero exit. Added `process.exit(0)` on success. All 222 tests pass.
 
 ---
 
