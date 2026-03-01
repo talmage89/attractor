@@ -50,6 +50,7 @@ export interface RunResult {
   nodeOutcomes: Map<string, Outcome>;
   finalContext: Map<string, unknown>;
   durationMs: number;
+  totalCostUsd: number;
 }
 
 /** Default mock handler — always returns success. Used when no real registry is provided. */
@@ -116,6 +117,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
   let completedNodes: string[] = [];
   let nodeOutcomes = new Map<string, Outcome>();
   const nodeRetries = new Map<string, number>();
+  let totalCostUsd = 0;
 
   // If resuming from checkpoint, restore state
   let startNode = findStartNode(graph);
@@ -246,6 +248,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
         initialAttempt
       );
 
+      totalCostUsd += exitOutcome.costUsd ?? 0;
       emit(config, {
         kind: "stage_completed",
         nodeId: currentNode.id,
@@ -328,6 +331,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       costUsd: outcome.costUsd,
       timestamp: Date.now(),
     });
+    totalCostUsd += outcome.costUsd ?? 0;
 
     // c. RECORD
     // Intentional deviation from spec Section 8.2 step c: start nodes are excluded
@@ -438,5 +442,6 @@ export async function run(config: RunConfig): Promise<RunResult> {
     nodeOutcomes,
     finalContext,
     durationMs: Date.now() - startTime,
+    totalCostUsd,
   };
 }

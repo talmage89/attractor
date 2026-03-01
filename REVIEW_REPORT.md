@@ -114,7 +114,7 @@ The codebase is in excellent shape after four prior review cycles with all previ
 
 - **Severity:** TRIVIAL
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/cli.ts:167-172`, `src/engine/runner.ts:41-47`
 - **Description:** The phase 8 spec says `cmdRun` should "Print summary: status, completed nodes, duration, **total cost**." The current summary output only prints status, completed nodes, and duration:
   ```typescript

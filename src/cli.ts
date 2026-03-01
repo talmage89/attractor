@@ -172,6 +172,9 @@ async function cmdRun(args: string[]): Promise<void> {
   process.stdout.write(`\nStatus: ${result.status}\n`);
   process.stdout.write(`Completed nodes: ${result.completedNodes.join(", ")}\n`);
   process.stdout.write(`Duration: ${durationS}s\n`);
+  if (result.totalCostUsd > 0) {
+    process.stdout.write(`Total cost: $${result.totalCostUsd.toFixed(4)}\n`);
+  }
 
   process.exit(result.status === "success" ? 0 : 1);
 }
