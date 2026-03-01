@@ -68,10 +68,11 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/backend/cc-backend.ts:47-66`
 - **Description:** The spec (Section 7.2) specifies that the `query()` call should use `model: options.model ?? "claude-sonnet-4-5-20250514"` and `maxTurns: options.maxTurns ?? 200` as defaults. The implementation only sets `model`, `maxTurns`, and `effort` if they are explicitly provided (`if (options.model !== undefined) queryOptions.model = options.model`). When not provided, the CC SDK uses its own internal defaults, which may differ from the spec's intended defaults. In particular, if the SDK defaults to a different model or a lower turn limit, pipeline behavior could differ unexpectedly.
 - **Recommendation:** Apply the spec's defaults: `queryOptions.model = options.model ?? "claude-sonnet-4-5-20250514"` and `queryOptions.maxTurns = options.maxTurns ?? 200`. Effort can remain conditional since `"high"` may already be the SDK default.
+- **Fix:** Replaced conditional `if (options.model !== undefined)` and `if (options.maxTurns !== undefined)` assignments with `queryOptions.model = options.model ?? "claude-sonnet-4-5-20250514"` and `queryOptions.maxTurns = options.maxTurns ?? 200`. Added a test verifying defaults are applied when neither option is specified. 242 tests pass.
 
 ---
 

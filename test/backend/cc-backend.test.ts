@@ -184,6 +184,34 @@ describe("runCC", () => {
     );
   });
 
+  it("applies default model and maxTurns when not specified", async () => {
+    mockQuery.mockReturnValueOnce(
+      mockGenerator([
+        { type: "system", subtype: "init", session_id: "s-def" },
+        {
+          type: "result",
+          subtype: "success",
+          result: "",
+          session_id: "s-def",
+          total_cost_usd: 0,
+          num_turns: 1,
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ]) as any
+    );
+
+    await runCC("test", { cwd: "/tmp" });
+
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          model: "claude-sonnet-4-5-20250514",
+          maxTurns: 200,
+        }),
+      })
+    );
+  });
+
   it("passes system prompt append", async () => {
     mockQuery.mockReturnValueOnce(
       mockGenerator([
