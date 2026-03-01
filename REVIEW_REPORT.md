@@ -18,7 +18,7 @@ This is the sixteenth code review pass of the Attractor TypeScript DAG pipeline 
 
 - **Severity:** LOW
 - **Category:** Code Quality / Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED — added `applyTransforms(graph)` before `validate(graph)` in `cmdRun` (line 100)
 - **File(s):** `src/cli.ts:99-100`
 - **Description:** The `cmdRun` function calls `validate(graph)` immediately after `parse(source)` without first calling `applyTransforms(graph)`:
 
