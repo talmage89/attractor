@@ -266,7 +266,10 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
     // g. LOOP RESTART CHECK
     if (edge.loopRestart) {
-      throw new Error("loopRestart is not yet implemented");
+      // Per spec Section 8.2 step g: restart the run with a fresh logsRoot.
+      // A new sibling directory is used so logs from each cycle are preserved.
+      const restartLogsRoot = `${config.logsRoot}-restart-${Date.now()}`;
+      return run({ ...config, logsRoot: restartLogsRoot, resumeFromCheckpoint: undefined });
     }
 
     // e. CHECKPOINT (save with nextNode = edge.to)

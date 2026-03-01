@@ -313,6 +313,44 @@ describe("execution engine", () => {
     expect(callLog).toContain("c");
   });
 
+  it("restarts the run when loopRestart edge is selected", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test loop restart"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a
+        a -> a [loop_restart=true, condition="outcome=success"]
+        a -> e  [condition="outcome=fail"]
+      }
+    `);
+
+    let callCount = 0;
+    const loopHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        callCount++;
+        // First call in original run: trigger loop restart
+        // Second call in restarted run: exit via fail edge
+        return callCount === 1 ? { status: "success" } : { status: "fail" };
+      },
+    };
+    const registry = new HandlerRegistry(loopHandler);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    // Node `a` was called once per run (original + restart = 2)
+    expect(callCount).toBe(2);
+    // The final result is from the restarted run
+    expect(result.status).toBe("success");
+  });
+
   it("handles pipeline with no work nodes (start -> exit)", async () => {
     const graph = parse(`
       digraph G {

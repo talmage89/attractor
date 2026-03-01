@@ -16,10 +16,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** HIGH
 - **Category:** Spec Compliance / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:269`
 - **Description:** When an edge with `loop_restart=true` is selected, the runner throws `new Error("loopRestart is not yet implemented")`. Any pipeline that uses `loop_restart` on an edge will crash at runtime with an unhandled exception. The spec (Section 8.2, step g) says: "If edge.loopRestart: Restart the run with a fresh logsRoot. RETURN."
-- **Recommendation:** Implement loop restart or, if deliberately deferred, return a structured failure outcome (`{ status: "fail", failureReason: "loopRestart is not yet implemented" }`) instead of throwing. Throwing bypasses normal error handling and produces an unclean failure. Document the omission in a comment.
+- **Fix:** Replaced the throw with a recursive `run()` call using a fresh `logsRoot` (sibling directory with `-restart-{timestamp}` suffix) and no `resumeFromCheckpoint`. Returns the result of the restarted run. Added a test that verifies the node is called once per run (2 total across original + restart) and that the final result comes from the restarted run. All 220 tests pass.
 
 ---
 
