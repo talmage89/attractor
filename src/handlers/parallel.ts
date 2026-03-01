@@ -85,10 +85,13 @@ export class ParallelHandler implements Handler {
     const maxParallelStr = node.raw.get("max_parallel") ?? "4";
     const maxParallel = parseInt(maxParallelStr, 10) || 4;
 
-    const effectivePolicy =
-      joinPolicy === "wait_all" || joinPolicy === "first_success"
-        ? joinPolicy
-        : "wait_all";
+    const isKnownPolicy = joinPolicy === "wait_all" || joinPolicy === "first_success";
+    if (!isKnownPolicy) {
+      process.stderr.write(
+        `[attractor] Warning: node "${node.id}" has unrecognized join_policy "${joinPolicy}"; defaulting to "wait_all"\n`
+      );
+    }
+    const effectivePolicy: "wait_all" | "first_success" = isKnownPolicy ? joinPolicy : "wait_all";
 
     config.onEvent?.({
       kind: "parallel_started",

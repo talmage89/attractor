@@ -92,10 +92,11 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/parallel.ts:88-91`
 - **Description:** The Phase 8 spec says: "If an unrecognized join policy is encountered, treat it as `wait_all` and emit a warning via `config.onEvent`." The implementation silently treats unrecognized values as `wait_all` without any event or log. While there is no `"warning"` event type defined in `PipelineEvent`, the spec's intent is to make the fallback visible. Users who misconfigure `join_policy="k_of_n"` (which is listed in the source spec but deferred) would get silent fallback to `wait_all` with no indication.
 - **Recommendation:** When `joinPolicy` is neither `"wait_all"` nor `"first_success"`, write a message to `process.stderr` or emit a custom event, so the operator knows the configured policy was not honored.
+- **Fix:** When `joinPolicy` is an unrecognized value, `process.stderr.write()` is now called with a message including the node ID, the unrecognized policy name, and the fallback policy. A test verifies the warning is emitted and that behavior falls back to `wait_all`. 245 tests pass.
 
 ---
 
@@ -120,7 +121,7 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 
 - Total findings: 8
 - Critical: 0
-- High: 1
-- Medium: 3
-- Low: 3
-- Trivial: 1
+- High: 1 (RESOLVED)
+- Medium: 3 (RESOLVED)
+- Low: 3 (2 RESOLVED, 1 RESOLVED)
+- Trivial: 1 (OPEN)

@@ -175,6 +175,52 @@ describe("ParallelHandler", () => {
     expect(outcome.status).toBe("fail");
   });
 
+  it("emits stderr warning for unrecognized join_policy and defaults to wait_all", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component, join_policy="k_of_n"]
+        ok   [shape=box]
+        bad  [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> ok
+        fork -> bad
+        ok -> join
+        bad -> join
+        join -> e
+      }
+    `);
+
+    const mock = new MockHandler({
+      ok: { status: "success" },
+      bad: { status: "fail" },
+    });
+    const registry = new HandlerRegistry(mock);
+    const handler = new ParallelHandler(registry);
+
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    const spy = (chunk: any) => { stderrChunks.push(String(chunk)); return true; };
+    process.stderr.write = spy as any;
+    try {
+      const outcome = await handler.execute(
+        graph.nodes.get("fork")!, new Context(), graph,
+        { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+      );
+      // Unrecognized policy => falls back to wait_all => partial_success
+      expect(outcome.status).toBe("partial_success");
+    } finally {
+      process.stderr.write = origWrite;
+    }
+    const warning = stderrChunks.join("");
+    expect(warning).toContain("unrecognized join_policy");
+    expect(warning).toContain("k_of_n");
+    expect(warning).toContain("wait_all");
+  });
+
   it("respects max_parallel concurrency limit", async () => {
     const graph = parse(`
       digraph G {
