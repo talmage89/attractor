@@ -385,6 +385,15 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
     // CHECKPOINT — intentionally placed after edge selection (spec step e)
     // so we can record currentNode = edge.to (the node to resume from).
+    emit(config, {
+      kind: "edge_selected",
+      from: currentNode.id,
+      to: edge.to,
+      label: edge.label,
+      reason: edge.condition ? "condition" : "auto",
+      timestamp: Date.now(),
+    });
+
     await saveCheckpoint(
       {
         timestamp: Date.now(),
@@ -401,15 +410,6 @@ export async function run(config: RunConfig): Promise<RunResult> {
     emit(config, {
       kind: "checkpoint_saved",
       nodeId: currentNode.id,
-      timestamp: Date.now(),
-    });
-
-    emit(config, {
-      kind: "edge_selected",
-      from: currentNode.id,
-      to: edge.to,
-      label: edge.label,
-      reason: edge.condition ? "condition" : "auto",
       timestamp: Date.now(),
     });
 
