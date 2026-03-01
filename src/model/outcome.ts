@@ -12,4 +12,5 @@ export interface Outcome {
   contextUpdates?: Record<string, unknown>;
   notes?: string;
   failureReason?: string;
+  costUsd?: number;
 }

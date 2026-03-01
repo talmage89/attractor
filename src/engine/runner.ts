@@ -196,6 +196,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
         nodeId: currentNode.id,
         outcome: exitOutcome,
         durationMs: Date.now() - nodeStart,
+        costUsd: exitOutcome.costUsd,
         timestamp: Date.now(),
       });
 
@@ -264,6 +265,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       nodeId: currentNode.id,
       outcome,
       durationMs: Date.now() - nodeStart,
+      costUsd: outcome.costUsd,
       timestamp: Date.now(),
     });
 

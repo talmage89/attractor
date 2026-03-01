@@ -16,7 +16,7 @@ The codebase is in good shape after three prior review cycles. All previous find
 
 - **Severity:** MEDIUM
 - **Category:** Spec Compliance / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:194-200`, `src/handlers/codergen.ts:190-196`, `src/model/outcome.ts`, `src/cli.ts:33-36`
 - **Description:** The `PipelineEvent` type for `stage_completed` has `costUsd?: number`. The CLI's `formatCost(event.costUsd)` and `formatEvent` for `stage_completed` handle this field and would display `$Y.YY` in stage summaries. However, the runner always emits `stage_completed` without `costUsd`:
   ```typescript

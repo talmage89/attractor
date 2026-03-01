@@ -350,6 +350,31 @@ describe("CodergenHandler", () => {
     expect(typeof ccEvents[0].timestamp).toBe("number");
   });
 
+  it("populates outcome.costUsd from ccResult.costUsd", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt="Do work"]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult({ costUsd: 0.123 }));
+
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+    const outcome = await handler.execute(
+      graph.nodes.get("work")!,
+      new Context(),
+      graph,
+      config as any
+    );
+
+    expect(outcome.costUsd).toBeCloseTo(0.123);
+  });
+
   it("includes outgoing edge labels in status instruction", async () => {
     const graph = parse(`
       digraph G {

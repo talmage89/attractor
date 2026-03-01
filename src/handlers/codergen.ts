@@ -224,6 +224,11 @@ export class CodergenHandler implements Handler {
       outcome.status = "success";
     }
 
+    // Propagate cost from CC result so callers can surface it in stage_completed events
+    if (ccResult.costUsd > 0) {
+      outcome.costUsd = ccResult.costUsd;
+    }
+
     // 10. Write final status
     try {
       await fs.writeFile(statusFilePath, JSON.stringify(outcome, null, 2), "utf-8");
