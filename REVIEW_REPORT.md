@@ -160,10 +160,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/conditions/evaluator.ts:2-3`
 - **Description:** `import { Outcome } from "../model/outcome.js"` and `import { Context } from "../model/context.js"` use value imports. `Outcome` is an interface (zero runtime footprint); `Context` is a class but is only used as a type annotation. Both should use `import type`. With `verbatimModuleSyntax` or strict ESM, value imports of type-only bindings can cause issues.
-- **Recommendation:** Change to `import type { Outcome } from "../model/outcome.js"` and `import type { Context } from "../model/context.js"`.
+- **Fix:** Changed both to `import type`. All 237 tests pass.
 
 ---
 

@@ -1,6 +1,6 @@
 import { parseCondition } from "./parser.js";
-import { Outcome } from "../model/outcome.js";
-import { Context } from "../model/context.js";
+import type { Outcome } from "../model/outcome.js";
+import type { Context } from "../model/context.js";
 
 export function resolveKey(
   key: string,
