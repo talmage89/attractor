@@ -8,6 +8,7 @@ import type { PipelineEvent, Question, Answer } from "../model/events.js";
 import { saveCheckpoint, loadCheckpoint } from "../model/checkpoint.js";
 import { HandlerRegistry } from "../handlers/registry.js";
 import type { Handler } from "../handlers/registry.js";
+import { WaitForHumanHandler } from "../handlers/wait-human.js";
 import { applyTransforms } from "./transforms.js";
 import { validateOrThrow } from "../validation/validator.js";
 import { selectEdge } from "./edge-selection.js";
@@ -88,9 +89,10 @@ export async function run(config: RunConfig): Promise<RunResult> {
   // Use provided registry or create default
   const registry = config.registry ?? new HandlerRegistry(defaultMockHandler);
 
-  // Always register built-in start/exit handlers so they never fall through to custom defaults
+  // Always register built-in handlers so they never fall through to custom defaults
   registry.register("start", { async execute(): Promise<Outcome> { return { status: "success" }; } });
   registry.register("exit", { async execute(): Promise<Outcome> { return { status: "success" }; } });
+  registry.register("wait.human", new WaitForHumanHandler(config.interviewer));
 
   // Apply transforms
   applyTransforms(graph);
