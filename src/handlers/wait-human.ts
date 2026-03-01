@@ -30,7 +30,7 @@ export class WaitForHumanHandler implements Handler {
     node: GraphNode,
     _context: Context,
     graph: Graph,
-    _config: RunConfig
+    config: RunConfig
   ): Promise<Outcome> {
     const edges = outgoingEdges(graph, node.id);
     if (edges.length === 0) {
@@ -53,7 +53,9 @@ export class WaitForHumanHandler implements Handler {
       stage: node.id,
     };
 
+    config.onEvent?.({ kind: "human_question", question, timestamp: Date.now() });
     const answer = await this.interviewer.ask(question);
+    config.onEvent?.({ kind: "human_answer", answer, timestamp: Date.now() });
 
     // Handle TIMEOUT or SKIPPED — try default choice
     if (answer.value === "TIMEOUT" || answer.value === "SKIPPED") {

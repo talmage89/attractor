@@ -76,7 +76,7 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/wait-human.ts:29-102`
 - **Description:** The spec (Section 16.1) defines `human_question` and `human_answer` pipeline events. The `WaitForHumanHandler.execute()` receives `config: RunConfig` (aliased as `_config`) but never calls `config.onEvent`. As a result: (a) monitoring callers cannot observe when the pipeline pauses for human input; (b) the CLI's `formatEvent` handler at `src/cli.ts:49` handles `human_question` but would never receive it; (c) users building automated test harnesses around pipeline events cannot detect human gate prompts. The `Question` and `Answer` types needed for these events are already defined and imported in the file.
 - **Recommendation:** Rename `_config` to `config` in the parameter list and add event emission:
@@ -149,5 +149,5 @@ This is a fresh third-pass review. The codebase is well-structured and functiona
 - Critical: 0
 - High: 1 (RESOLVED)
 - Medium: 1 (RESOLVED)
-- Low: 5 (4 OPEN, 1 RESOLVED)
+- Low: 5 (3 OPEN, 2 RESOLVED)
 - Trivial: 0
