@@ -378,6 +378,32 @@ describe("CodergenHandler", () => {
     expect(outcome.costUsd).toBeCloseTo(0.123);
   });
 
+  it("uses previousNodeId as thread fallback when no thread_id is set", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        step1 [shape=box, prompt="First step", fidelity="full"]
+        step2 [shape=box, prompt="Second step", fidelity="full"]
+        s -> step1 -> step2 -> e
+      }
+    `);
+
+    // First call: execute step2 with previousNodeId = "step1"
+    mockRunCC.mockResolvedValueOnce(makeCCResult({ sessionId: "session-step1-thread" }));
+
+    const handler = new CodergenHandler(sessionManager);
+    const config = {
+      ...makeConfig(),
+      previousNodeId: "step1",
+    };
+    await handler.execute(graph.nodes.get("step2")!, new Context(), graph, config as any);
+
+    // The session should be stored under "step1" (the previousNodeId fallback thread)
+    expect(sessionManager.getSessionId("step1")).toBe("session-step1-thread");
+  });
+
   it("includes outgoing edge labels in status instruction", async () => {
     const graph = parse(`
       digraph G {

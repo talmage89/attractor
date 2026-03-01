@@ -94,20 +94,14 @@ The codebase continues to be in excellent shape after eight prior review cycles.
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/model/fidelity.ts:22-32`, `src/handlers/codergen.ts:139`
 - **Description:** The spec (Section 11.3) defines thread ID resolution precedence as: node > edge > class-derived > **previous node ID**. The implementation correctly defines the four-argument `resolveThreadId(node, graph, incomingEdge?, previousNodeId?)` signature, but the only call site at `codergen.ts:139` passes only three arguments:
   ```typescript
   const threadId = resolveThreadId(node, graph, config.incomingEdge);
   ```
   `previousNodeId` is therefore always `undefined`, causing the fallback at line 31 to always return `node.id` instead of the previous node's ID. The spec-described "use previous node as thread" feature is never exercised. This means two sequential LLM nodes in the same pipeline always get different thread IDs (their own IDs) rather than sharing the previous node's thread when not otherwise configured.
-- **Recommendation:** Pass the previous node's ID into `CodergenHandler.execute`. The runner tracks `currentNode` at advance-time; the simplest fix is to add a `previousNodeId?: string` field to `NodeConfig` (or `RunConfig`) and populate it just before advancing:
-  ```typescript
-  // In runner.ts, before updating currentNode:
-  nodeConfig.previousNodeId = currentNode.id;
-  currentNode = graph.nodes.get(edge.to)!;
-  ```
-  Then update `codergen.ts` to forward it: `resolveThreadId(node, graph, config.incomingEdge, config.previousNodeId)`.
+- **Fix:** Added `previousNodeId?: string` to `RunConfig`. The runner tracks `currentPreviousNodeId` in the traversal loop, updating it to `currentNode.id` before each advance. `nodeConfig` now includes `previousNodeId: currentPreviousNodeId`. `codergen.ts` forwards it: `resolveThreadId(node, graph, config.incomingEdge, config.previousNodeId)`. Test added to `test/handlers/codergen.test.ts` verifying the session is stored under the previous node's ID when no explicit `thread_id` is configured.
 
 ---
 

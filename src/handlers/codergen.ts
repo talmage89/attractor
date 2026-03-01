@@ -136,7 +136,7 @@ export class CodergenHandler implements Handler {
     if (config.firstNodeAfterResume && fidelity === "full") {
       fidelity = "summary:high";
     }
-    const threadId = resolveThreadId(node, graph, config.incomingEdge);
+    const threadId = resolveThreadId(node, graph, config.incomingEdge, config.previousNodeId);
 
     let finalPrompt = prompt;
     let resumeSessionId: string | undefined;

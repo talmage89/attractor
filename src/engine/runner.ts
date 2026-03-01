@@ -42,6 +42,13 @@ export interface RunConfig {
    * and graph-level defaults in the resolution chain).
    */
   incomingEdge?: Edge;
+  /**
+   * The ID of the node that was executed immediately before the current node.
+   * Used by CodergenHandler as the fallback thread ID (spec Section 11.3 step 4)
+   * when no node-level, edge-level, or class-derived thread ID is configured,
+   * allowing sequential LLM nodes to share a conversation thread by default.
+   */
+  previousNodeId?: string;
 }
 
 export interface RunResult {
@@ -129,6 +136,10 @@ export async function run(config: RunConfig): Promise<RunResult> {
   // can honour edge-level fidelity/threadId overrides.
   let currentIncomingEdge: Edge | undefined = undefined;
 
+  // Track the ID of the most recently completed node so handlers can use it
+  // as a fallback thread ID (spec Section 11.3 step 4).
+  let currentPreviousNodeId: string | undefined = undefined;
+
   if (config.resumeFromCheckpoint) {
     const checkpoint = await loadCheckpoint(config.resumeFromCheckpoint);
     completedNodes = checkpoint.completedNodes;
@@ -208,6 +219,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       ...config,
       onEvent: wrappedOnEvent,
       incomingEdge: currentIncomingEdge,
+      previousNodeId: currentPreviousNodeId,
       ...(isFirstNodeAfterResume ? { firstNodeAfterResume: true } : {}),
     };
     isFirstNodeAfterResume = false;
@@ -402,6 +414,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
     });
 
     // h. ADVANCE
+    currentPreviousNodeId = currentNode.id;
     currentIncomingEdge = edge;
     currentNode = graph.nodes.get(edge.to)!;
   }
