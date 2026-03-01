@@ -44,9 +44,10 @@ export async function executeWithRetry(
   context: Context,
   graph: Graph,
   config: RunConfig,
-  policy: RetryPolicy
+  policy: RetryPolicy,
+  initialAttempt = 1
 ): Promise<Outcome> {
-  for (let attempt = 1; attempt <= policy.maxAttempts; attempt++) {
+  for (let attempt = initialAttempt; attempt <= policy.maxAttempts; attempt++) {
     let outcome: Outcome;
     try {
       outcome = await handler.execute(node, context, graph, config);

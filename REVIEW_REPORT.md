@@ -54,7 +54,7 @@ The codebase is in excellent shape after four prior review cycles with all previ
 
 - **Severity:** LOW
 - **Category:** Correctness / Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:312-323`, `src/engine/runner.ts:345-356`, `src/model/checkpoint.ts:5-13`
 - **Description:** The `Checkpoint` interface includes a `nodeRetries: Record<string, number>` field, which implies intent to persist per-node retry counts so that a resumed pipeline knows how many retries have already been consumed. However, the runner always saves `nodeRetries: {}`:
   ```typescript
@@ -131,7 +131,7 @@ The codebase is in excellent shape after four prior review cycles with all previ
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:2`
 - **Description:** `import * as path from "node:path"` is declared at line 2 of `runner.ts` but `path` is never referenced anywhere in the file. The loop-restart logic uses template literals (`${config.logsRoot}-restart-${Date.now()}`), not `path.join`, and checkpoint I/O is delegated to `saveCheckpoint`/`loadCheckpoint` in `checkpoint.ts` which imports its own `path`.
 - **Recommendation:** Remove the unused import.

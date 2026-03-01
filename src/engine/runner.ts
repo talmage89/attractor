@@ -1,5 +1,4 @@
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import type { Graph, GraphNode, Edge } from "../model/graph.js";
 import { findStartNode, isTerminal } from "../model/graph.js";
 import type { Outcome } from "../model/outcome.js";
@@ -116,6 +115,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
   let completedNodes: string[] = [];
   let nodeOutcomes = new Map<string, Outcome>();
+  const nodeRetries = new Map<string, number>();
 
   // If resuming from checkpoint, restore state
   let startNode = findStartNode(graph);
@@ -144,6 +144,10 @@ export async function run(config: RunConfig): Promise<RunResult> {
     }
     // Restore session map so full-fidelity CC sessions resume correctly
     sessionManager.restore(checkpoint.sessionMap);
+    // Restore per-node retry counts so the first node executes from the right attempt
+    for (const [k, v] of Object.entries(checkpoint.nodeRetries)) {
+      nodeRetries.set(k, v as number);
+    }
     // Resume from saved currentNode
     const resumeNode = graph.nodes.get(checkpoint.currentNode);
     if (resumeNode) {
@@ -167,13 +171,44 @@ export async function run(config: RunConfig): Promise<RunResult> {
   let goalGateRetries = 0;
   const maxGoalGateRetries = graph.attributes.defaultMaxRetry;
 
+  // Wraps config.onEvent to intercept stage_retrying events, update per-node
+  // retry counts, and save a mid-retry checkpoint so that a resumed pipeline
+  // can start from the right attempt number rather than restarting at 1.
+  function wrappedOnEvent(event: PipelineEvent): void {
+    if (event.kind === "stage_retrying") {
+      nodeRetries.set(event.nodeId, event.attempt);
+      // Fire-and-forget: persist the updated retry count so crash recovery can
+      // honour it. Errors here are non-fatal (worst case: retry restarts at 1).
+      saveCheckpoint(
+        {
+          timestamp: Date.now(),
+          currentNode: currentNode.id,
+          completedNodes: [...completedNodes],
+          nodeOutcomes: Object.fromEntries(nodeOutcomes),
+          nodeRetries: Object.fromEntries(nodeRetries),
+          contextValues: context.snapshot(),
+          sessionMap: sessionManager.snapshot(),
+        },
+        config.logsRoot
+      ).catch(() => {});
+    }
+    config.onEvent?.(event);
+  }
+
   // 3. TRAVERSAL LOOP
   loop: while (true) {
+    // On resume, compute how many attempts the current node has already consumed
+    // so executeWithRetry starts from the right attempt (not attempt 1).
+    const initialAttempt = isFirstNodeAfterResume
+      ? (nodeRetries.get(currentNode.id) ?? 0) + 1
+      : 1;
+
     // Build a per-iteration config that includes the incoming edge (so handlers
     // can honour edge-level fidelity/threadId overrides) and the
     // firstNodeAfterResume flag for the first node executed after a restore.
     const nodeConfig: RunConfig = {
       ...config,
+      onEvent: wrappedOnEvent,
       incomingEdge: currentIncomingEdge,
       ...(isFirstNodeAfterResume ? { firstNodeAfterResume: true } : {}),
     };
@@ -207,7 +242,8 @@ export async function run(config: RunConfig): Promise<RunResult> {
         context,
         graph,
         nodeConfig,
-        exitPolicy
+        exitPolicy,
+        initialAttempt
       );
 
       emit(config, {
@@ -280,7 +316,8 @@ export async function run(config: RunConfig): Promise<RunResult> {
       context,
       graph,
       nodeConfig,
-      policy
+      policy,
+      initialAttempt
     );
 
     emit(config, {
@@ -338,7 +375,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
         currentNode: edge.to,
         completedNodes: [...completedNodes],
         nodeOutcomes: Object.fromEntries(nodeOutcomes),
-        nodeRetries: {},
+        nodeRetries: Object.fromEntries(nodeRetries),
         contextValues: context.snapshot(),
         sessionMap: sessionManager.snapshot(),
       },
@@ -372,7 +409,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       currentNode: currentNode.id,
       completedNodes: [...completedNodes],
       nodeOutcomes: Object.fromEntries(nodeOutcomes),
-      nodeRetries: {},
+      nodeRetries: Object.fromEntries(nodeRetries),
       contextValues: context.snapshot(),
       sessionMap: sessionManager.snapshot(),
     },

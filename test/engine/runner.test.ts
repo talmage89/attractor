@@ -578,6 +578,90 @@ describe("execution engine", () => {
     expect(sessionManager.getSessionId("main-thread")).toBe("restored-session-456");
   });
 
+  it("checkpoint includes non-empty nodeRetries after a retried node", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test nodeRetries tracking"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box, max_retries=2]
+        s -> a -> e
+      }
+    `);
+
+    let callCount = 0;
+    const retryOnceThenSucceed: Handler = {
+      async execute(): Promise<Outcome> {
+        callCount++;
+        return callCount === 1 ? { status: "retry" } : { status: "success" };
+      },
+    };
+    const registry = new HandlerRegistry(retryOnceThenSucceed);
+    const logsRoot = path.join(tmpDir, "logs");
+
+    await run({ graph, cwd: tmpDir, logsRoot, interviewer: noopInterviewer, registry });
+
+    const checkpoint = JSON.parse(
+      await fs.readFile(path.join(logsRoot, "checkpoint.json"), "utf-8")
+    );
+    // Node "a" retried once: nodeRetries["a"] should be 1
+    expect(checkpoint.nodeRetries).toMatchObject({ a: 1 });
+  });
+
+  it("resume with saved nodeRetries uses initialAttempt, consuming fewer total attempts", async () => {
+    // Use a conditional edge so a "fail" outcome from "a" terminates the pipeline
+    // (no fallback edge → selectEdge returns null → finalStatus = fail).
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test nodeRetries resume"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box, max_retries=1]
+        s -> a -> e [condition="outcome=success"]
+      }
+    `);
+
+    const logsRoot = path.join(tmpDir, "logs");
+
+    // Save a checkpoint indicating node "a" has already consumed 1 retry attempt.
+    // With max_retries=1 (maxAttempts=2), only 1 attempt remains: initialAttempt=2.
+    // Without the fix, initialAttempt=1 and 2 calls would be made.
+    await fs.mkdir(logsRoot, { recursive: true });
+    await saveCheckpoint({
+      timestamp: Date.now(),
+      currentNode: "a",
+      completedNodes: [],
+      nodeOutcomes: {},
+      nodeRetries: { a: 1 },  // attempt 1 already failed
+      contextValues: { "graph.goal": "Test nodeRetries resume" },
+      sessionMap: {},
+    }, logsRoot);
+
+    let callCount = 0;
+    const alwaysRetryHandler: Handler = {
+      async execute(node: any): Promise<Outcome> {
+        if (node.id === "a") callCount++;
+        return { status: "retry" };
+      },
+    };
+    const registry = new HandlerRegistry(alwaysRetryHandler);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot,
+      interviewer: noopInterviewer,
+      resumeFromCheckpoint: path.join(logsRoot, "checkpoint.json"),
+      registry,
+    });
+
+    // With fix: initialAttempt=2, only 1 call made (attempt 2 of 2).
+    // Without fix: initialAttempt=1, 2 calls would be made.
+    expect(callCount).toBe(1);
+    // No success edge was taken (a always retried then failed) → pipeline fails
+    expect(result.status).toBe("fail");
+  });
+
   it("goal-gate retry loop is bounded by default_max_retry", async () => {
     // Pipeline: start -> work -> exit; work has goal_gate=true and always fails;
     // exit has retry_target pointing back to work. With default_max_retry=2 the
