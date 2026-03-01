@@ -838,6 +838,37 @@ describe("execution engine", () => {
     expect(callCount).toBe(3);
   });
 
+  it("recognises id-based exit node (no shape/type) as terminal, runs goal gate", async () => {
+    // FINDING-001: isTerminal must also check node.id. A node named 'exit' with
+    // no shape=Msquare or type=exit attribute must be treated as terminal.
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test id-based exit"]
+        start
+        a [shape=box, goal_gate=true]
+        start -> a -> exit
+      }
+    `);
+
+    const events: PipelineEvent[] = [];
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      onEvent: (e) => events.push(e),
+    });
+
+    // Pipeline should reach the exit node and terminate successfully
+    expect(result.status).toBe("success");
+    expect(result.completedNodes).toContain("a");
+    // goal_gate_check event must be emitted (only happens in the terminal branch)
+    const gateEvents = events.filter(e => e.kind === "goal_gate_check");
+    expect(gateEvents).toHaveLength(1);
+    const gateEvt = gateEvents[0] as Extract<PipelineEvent, { kind: "goal_gate_check" }>;
+    expect(gateEvt.satisfied).toBe(true);
+  });
+
   it("checkpoint_saved event nodeId matches the resume node (edge.to), not the completed node", async () => {
     const graph = parse(`
       digraph G {

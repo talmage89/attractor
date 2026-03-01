@@ -16,7 +16,7 @@ The Attractor codebase is in very good shape after ten prior review cycles. All 
 
 - **Severity:** HIGH
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/model/graph.ts:78-80`, `src/validation/rules.ts:41-54`
 - **Description:** `findExitNode` returns a node if its id is `'exit'` or `'end'`. `terminalNodeRule` likewise accepts those ids as valid exit nodes. However `isTerminal` only checks `node.shape === 'Msquare' || node.type === 'exit'` — it never checks `node.id`. If a pipeline uses a node named `exit` (or `end`) without also setting `shape=Msquare` or `type=exit`, validation passes and `findExitNode` returns the node, but `isTerminal` returns `false`. The runner therefore treats the node as a regular work node, executes it, then calls `selectEdge` which returns `null` (no outgoing edges from the exit node), breaks out of the loop — without passing through the goal gate or emitting the terminal-node events.
 

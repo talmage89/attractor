@@ -76,7 +76,7 @@ export function findExitNode(graph: Graph): GraphNode | null {
 }
 
 export function isTerminal(node: GraphNode): boolean {
-  return node.shape === "Msquare" || node.type === "exit";
+  return node.shape === "Msquare" || node.type === "exit" || node.id === "exit" || node.id === "end";
 }
 
 export function reachableFrom(graph: Graph, nodeId: string): Set<string> {
