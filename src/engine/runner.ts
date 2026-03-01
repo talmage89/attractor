@@ -234,7 +234,12 @@ export async function run(config: RunConfig): Promise<RunResult> {
       timestamp: Date.now(),
     });
 
-    // c. RECORD (only non-start, non-exit work nodes)
+    // c. RECORD
+    // Intentional deviation from spec Section 8.2 step c: start nodes are excluded
+    // from completedNodes and nodeOutcomes. Start nodes are sentinel markers for the
+    // pipeline entry point; including them would conflate "work done" with pipeline
+    // bookkeeping and would cause goal-gate logic to incorrectly evaluate the start
+    // node's outcome. Exit nodes are also excluded (handled in the terminal branch).
     if (!isStartNode) {
       completedNodes.push(currentNode.id);
       nodeOutcomes.set(currentNode.id, outcome);

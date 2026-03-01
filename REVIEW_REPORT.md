@@ -127,10 +127,10 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:208`, `src/engine/runner.ts:241-244`
 - **Description:** The runner skips recording the start node (`if (!isStartNode)` at line 242). The spec's RECORD step (Section 8.2, step c) says: "completedNodes.push(currentNode.id) / nodeOutcomes.set(currentNode.id, outcome)" with no exception for start nodes. The omission is mostly benign (start nodes rarely have goal gates or meaningful outcomes) but means the spec's documented behavior is not exactly followed.
-- **Recommendation:** Either remove the `isStartNode` exclusion to match the spec, or add a spec comment explaining the deviation. If start nodes are excluded intentionally (e.g., to keep `completedNodes` clean), document this.
+- **Fix:** Added an explicit comment at the RECORD step documenting this as an intentional spec deviation: start nodes are sentinel markers for the pipeline entry point, not work nodes; including them would conflate bookkeeping with work tracking and could affect goal-gate evaluation. An existing test validates the behavior (`completedNodes` is empty for a start→exit pipeline). All 235 tests pass.
 
 ---
 
@@ -184,5 +184,5 @@ The implementation is architecturally sound and covers all 8 phases with 219 pas
 - Critical: 0
 - High: 2 (all resolved)
 - Medium: 4 (all resolved)
-- Low: 6 (3 resolved, 3 open)
+- Low: 6 (4 resolved, 2 open)
 - Trivial: 3 (all open)
