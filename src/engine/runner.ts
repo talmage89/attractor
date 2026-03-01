@@ -5,7 +5,7 @@ import type { Outcome } from "../model/outcome.js";
 import { Context } from "../model/context.js";
 import type { PipelineEvent } from "../model/events.js";
 import { saveCheckpoint, loadCheckpoint } from "../model/checkpoint.js";
-import { HandlerRegistry } from "../handlers/registry.js";
+import { HandlerRegistry, SHAPE_TO_TYPE } from "../handlers/registry.js";
 import type { Handler } from "../handlers/registry.js";
 import { WaitForHumanHandler } from "../handlers/wait-human.js";
 import type { Interviewer } from "../interviewer/interviewer.js";
@@ -73,18 +73,7 @@ function emit(config: RunConfig, event: PipelineEvent): void {
 function handlerTypeFor(node: GraphNode): string {
   // Best-effort label for events; derive type from node attributes, not the resolved handler
   if (node.type) return node.type;
-  const shapeMap: Record<string, string> = {
-    Mdiamond: "start",
-    Msquare: "exit",
-    box: "codergen",
-    hexagon: "wait.human",
-    diamond: "conditional",
-    component: "parallel",
-    tripleoctagon: "parallel.fan_in",
-    parallelogram: "tool",
-    house: "stack.manager_loop",
-  };
-  return shapeMap[node.shape] ?? "default";
+  return SHAPE_TO_TYPE[node.shape] ?? "default";
 }
 
 export async function run(config: RunConfig): Promise<RunResult> {
@@ -382,7 +371,8 @@ export async function run(config: RunConfig): Promise<RunResult> {
       return run({ ...config, logsRoot: restartLogsRoot, resumeFromCheckpoint: undefined });
     }
 
-    // e. CHECKPOINT (save with nextNode = edge.to)
+    // CHECKPOINT — intentionally placed after edge selection (spec step e)
+    // so we can record currentNode = edge.to (the node to resume from).
     await saveCheckpoint(
       {
         timestamp: Date.now(),

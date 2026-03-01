@@ -135,7 +135,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:73-88`, `src/handlers/registry.ts:19-29`
 - **Description:** `runner.ts` contains a local `shapeMap` object used exclusively for emitting `stage_started` events:
   ```typescript
@@ -158,6 +158,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
   // ...
   return SHAPE_TO_TYPE[node.shape] ?? "default";
   ```
+- **Resolution:** Added `SHAPE_TO_TYPE` to the import from `registry.ts` in `runner.ts` and replaced the local `shapeMap` with a direct reference to `SHAPE_TO_TYPE`.
 
 ---
 
@@ -165,7 +166,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:375-376`
 - **Description:** The spec defines the traversal loop steps in order: b (execute), c (record), d (apply context), e (checkpoint), f (select edge), g (loop restart), h (advance). The implementation intentionally reorders these — checkpoint is saved **after** edge selection (f) and loop restart check (g) so the checkpoint can record `edge.to` (the next node) directly. This is a valid design decision noted in the comment `"(save with nextNode = edge.to)"`.
 
@@ -176,6 +177,7 @@ The codebase is in excellent shape after seven prior review cycles. This eighth-
   // so we can record currentNode = edge.to (the node to resume from).
   ```
   This removes the misleading spec step letter and makes the reasoning transparent.
+- **Resolution:** Updated the comment from `// e. CHECKPOINT (save with nextNode = edge.to)` to the two-line form described in the recommendation.
 
 ---
 
