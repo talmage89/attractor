@@ -97,7 +97,7 @@ The codebase is in excellent shape after four prior review cycles with all previ
 
 - **Severity:** LOW
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/handlers/parallel.ts:92-95`
 - **Description:** The phase 8 spec says: "If an unrecognized join policy is encountered, treat it as `wait_all` and emit a warning via `config.onEvent`." The implementation emits the warning directly to `process.stderr`:
   ```typescript

@@ -175,7 +175,7 @@ describe("ParallelHandler", () => {
     expect(outcome.status).toBe("fail");
   });
 
-  it("emits stderr warning for unrecognized join_policy and defaults to wait_all", async () => {
+  it("emits warning event for unrecognized join_policy and defaults to wait_all", async () => {
     const graph = parse(`
       digraph G {
         graph [goal="Test"]
@@ -201,24 +201,24 @@ describe("ParallelHandler", () => {
     const registry = new HandlerRegistry(mock);
     const handler = new ParallelHandler(registry);
 
-    const stderrChunks: string[] = [];
-    const origWrite = process.stderr.write.bind(process.stderr);
-    const spy = (chunk: any) => { stderrChunks.push(String(chunk)); return true; };
-    process.stderr.write = spy as any;
-    try {
-      const outcome = await handler.execute(
-        graph.nodes.get("fork")!, new Context(), graph,
-        { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
-      );
-      // Unrecognized policy => falls back to wait_all => partial_success
-      expect(outcome.status).toBe("partial_success");
-    } finally {
-      process.stderr.write = origWrite;
-    }
-    const warning = stderrChunks.join("");
-    expect(warning).toContain("unrecognized join_policy");
-    expect(warning).toContain("k_of_n");
-    expect(warning).toContain("wait_all");
+    const emittedEvents: any[] = [];
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, new Context(), graph,
+      {
+        graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer,
+        onEvent: (e: any) => emittedEvents.push(e),
+      } as any
+    );
+
+    // Unrecognized policy => falls back to wait_all => partial_success
+    expect(outcome.status).toBe("partial_success");
+
+    const warningEvent = emittedEvents.find((e) => e.kind === "warning");
+    expect(warningEvent).toBeDefined();
+    expect(warningEvent.nodeId).toBe("fork");
+    expect(warningEvent.message).toContain("unrecognized join_policy");
+    expect(warningEvent.message).toContain("k_of_n");
+    expect(warningEvent.message).toContain("wait_all");
   });
 
   it("respects max_parallel concurrency limit", async () => {

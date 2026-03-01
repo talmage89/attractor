@@ -51,6 +51,8 @@ export function formatEvent(event: PipelineEvent, startTime: number): string {
       return `${ts}   → edge "${event.label}" → ${event.to}`;
     case "human_question":
       return `${ts} [?] ${event.question.text}`;
+    case "warning":
+      return `${ts} ⚠ ${event.message}`;
     case "error":
       return `${ts} ✗ ${event.message}`;
     case "pipeline_completed": {
@@ -128,6 +130,7 @@ async function cmdRun(args: string[]): Promise<void> {
       event.kind === "stage_started" ||
       event.kind === "stage_completed" ||
       event.kind === "human_question" ||
+      event.kind === "warning" ||
       event.kind === "error"
     ) {
       process.stderr.write(line + "\n");

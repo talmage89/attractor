@@ -89,9 +89,12 @@ export class ParallelHandler implements Handler {
 
     const isKnownPolicy = joinPolicy === "wait_all" || joinPolicy === "first_success";
     if (!isKnownPolicy) {
-      process.stderr.write(
-        `[attractor] Warning: node "${node.id}" has unrecognized join_policy "${joinPolicy}"; defaulting to "wait_all"\n`
-      );
+      config.onEvent?.({
+        kind: "warning",
+        nodeId: node.id,
+        message: `node "${node.id}" has unrecognized join_policy "${joinPolicy}"; defaulting to "wait_all"`,
+        timestamp: Date.now(),
+      });
     }
     const effectivePolicy: "wait_all" | "first_success" = isKnownPolicy ? joinPolicy : "wait_all";
 
