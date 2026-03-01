@@ -71,7 +71,7 @@ export function formatEvent(event: PipelineEvent, startTime: number): string {
   }
 }
 
-async function cmdRun(args: string[]): Promise<void> {
+export async function cmdRun(args: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     args,
     options: {
@@ -177,7 +177,7 @@ async function cmdRun(args: string[]): Promise<void> {
   process.exit(result.status === "success" ? 0 : 1);
 }
 
-async function cmdValidate(args: string[]): Promise<void> {
+export async function cmdValidate(args: string[]): Promise<void> {
   const { positionals } = parseArgs({
     args,
     options: {},
@@ -207,7 +207,7 @@ async function cmdValidate(args: string[]): Promise<void> {
   process.exit(errors.length > 0 ? 2 : 0);
 }
 
-async function cmdVisualize(args: string[]): Promise<void> {
+export async function cmdVisualize(args: string[]): Promise<void> {
   const { positionals } = parseArgs({
     args,
     options: {},

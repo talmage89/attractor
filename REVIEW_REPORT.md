@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-01
 **Reviewer:** sixteenth-pass
-**Test Status:** All passing (339/339 across 22 test files)
+**Test Status:** All passing (349/349 across 22 test files)
 
 ---
 
@@ -59,7 +59,7 @@ This is the sixteenth code review pass of the Attractor TypeScript DAG pipeline 
 
 - **Severity:** LOW
 - **Category:** Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED — exported `cmdRun`, `cmdValidate`, `cmdVisualize` from `src/cli.ts`; added 10 tests for `cmdRun` and `cmdValidate` covering: valid pipeline exits 0, invalid pipeline exits 2 with error diagnostics, missing dotfile exits 3, missing file exits 3, transforms applied before validation (FINDING-001 regression), and `$goal` expansion pipeline exits 0.
 - **File(s):** `test/cli/cli.test.ts`, `src/cli.ts`
 - **Description:** The file `test/cli/cli.test.ts` tests only the `formatEvent` pure function. The three CLI command functions — `cmdRun`, `cmdValidate`, and `cmdVisualize` — have zero test coverage:
 
