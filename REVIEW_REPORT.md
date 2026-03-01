@@ -1,65 +1,186 @@
 # Code Review Report
 
 **Date:** 2026-03-01
-**Reviewer:** AI Agent (seventh-pass)
+**Reviewer:** AI Agent (eighth-pass)
 **Test Status:** All passing (260/260)
 
 ## Summary
 
-The codebase is in excellent shape after six prior review cycles. This seventh-pass review found no critical, high, or medium severity issues. Two low-severity findings were identified: a spec-compliance regression introduced by review cycle 6's FINDING-001 (the `resolveThreadId` priority order now contradicts SPEC.md), and a test-quality gap that allowed the regression to go undetected.
+The codebase is in excellent shape after seven prior review cycles. This eighth-pass review found no critical or high severity issues. One medium-severity issue was identified (the runner unconditionally overwrites caller-registered handlers for start/exit/wait.human, limiting library extensibility). Three low-severity spec compliance gaps and two trivial nits round out the findings.
 
 ---
 
 ## Findings
 
-### FINDING-001: `resolveThreadId` priority order contradicts SPEC.md (regression from review cycle 6)
+### FINDING-001: `runner.ts` unconditionally overwrites caller-registered start/exit/wait.human handlers
 
-- **Severity:** LOW
-- **Category:** Spec Compliance / Correctness
-- **Status:** RESOLVED
-- **File(s):** `src/model/fidelity.ts:28-29`
-- **Description:** SPEC.md (lines 1506–1507) and the Phase 4 completion criteria both specify that `resolveThreadId` should resolve node-level `threadId` **before** edge-level `threadId` — i.e., the priority chain is `node > edge > className > previousNodeId > nodeId`. The SPEC.md pseudocode is unambiguous:
+- **Severity:** MEDIUM
+- **Category:** Correctness / Integration
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:107-109`
+- **Description:** Every call to `run()` unconditionally registers three handlers on the caller-supplied registry:
   ```typescript
-  if (node.threadId) return node.threadId;            // node first (spec)
-  if (incomingEdge?.threadId) return incomingEdge.threadId;  // edge second (spec)
+  registry.register("start", { async execute() { return { status: "success" }; } });
+  registry.register("exit",  { async execute() { return { status: "success" }; } });
+  registry.register("wait.human", new WaitForHumanHandler(config.interviewer));
   ```
-  Review cycle 6 FINDING-001 deliberately inverted this to `edge > node` to "align `resolveThreadId` with `resolveFidelity`". However, `resolveFidelity` and `resolveThreadId` are intentionally specified with **different** priority orders: fidelity is `edge > node` while threadId is `node > edge`. The alignment rationale was incorrect. The current implementation:
+  `HandlerRegistry.register()` is a plain `Map.set()` — it overwrites any previously registered handler for the same key. This means a library user who creates a custom registry, registers a `"start"` handler that performs setup work, then calls `run()`, will have that handler silently replaced with the stub. The same applies to custom `"exit"` or `"wait.human"` handlers. There is no warning or error. The public API (`HandlerRegistry.register()`) implies full control over registered types, but `run()` violates that contract for three specific types.
+  - **Practical impact for `wait.human`:** If a caller registers their own `WaitForHumanHandler` (e.g., with a specialized interviewer or decorated logic), `run()` replaces it with one wrapping `config.interviewer`. The documented contract of passing both `registry` and `interviewer` is inconsistent.
+  - **Practical impact for `start`/`exit`:** The stubs always return success, so overwriting a no-op custom handler has no behavioral effect. But overwriting a setup-performing custom handler silently breaks the caller.
+- **Recommendation:** Change the registration strategy to use conditional registration — only register the built-in handler if no handler for that type has already been registered:
   ```typescript
-  if (incomingEdge?.threadId) return incomingEdge.threadId;  // edge first (wrong)
-  if (node.threadId) return node.threadId;  // node second (wrong)
+  if (!registry.hasHandler("start")) {
+    registry.register("start", { async execute() { return { status: "success" }; } });
+  }
   ```
-  **Impact:** A node with an explicit `thread_id="isolated"` attribute will be overridden by any incoming edge that also sets `thread_id`, contrary to spec intent. This affects CC session grouping: nodes that declare a fixed thread identity can have that identity silently hijacked by an upstream edge attribute.
-- **Recommendation:** Restore the spec-correct order in `resolveThreadId`: check `node.threadId` before `incomingEdge?.threadId`. Update or add a test to verify node > edge priority explicitly (see FINDING-002).
+  This requires adding a `hasHandler(type: string): boolean` method to `HandlerRegistry`. Alternatively, document the overwrite behavior explicitly in the JSDoc for `run()` and `RunConfig`, so callers know not to pre-register these three types.
 
 ---
 
-### FINDING-002: `resolveThreadId` tests do not cover the case where both node and edge have `threadId` set
+### FINDING-002: `CodergenHandler` fallback success outcome omits spec-specified `notes` and `contextUpdates`
 
 - **Severity:** LOW
-- **Category:** Test Quality
-- **Status:** RESOLVED
-- **File(s):** `test/backend/fidelity.test.ts:311-345`
-- **Description:** The two existing `resolveThreadId` tests exercise disjoint cases: (a) node has `threadId`, edge is absent — returns node's value; and (b) node has no `threadId`, edge has `threadId` — returns edge's value. Neither test sets **both** `node.threadId` and `incomingEdge.threadId` simultaneously, so the priority order between them is never verified. This gap allowed review cycle 6's priority inversion (FINDING-001 above) to pass all tests without detection.
-- **Recommendation:** Add a conflict-resolution test to `fidelity.test.ts`:
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/handlers/codergen.ts:209-218`
+- **Description:** When CC executes successfully but the agent did not write a `status.json` file, the implementation falls back to:
   ```typescript
-  it("returns node threadId over edge threadId (node > edge priority)", () => {
-    const node = makeNode({ threadId: "node-thread" });
-    const edge: Edge = {
-      from: "a", to: "test", label: "", condition: "",
-      weight: 0, fidelity: "", threadId: "edge-thread", loopRestart: false,
-    };
-    expect(resolveThreadId(node, graph, edge)).toBe("node-thread");
-  });
+  outcome = { status: "success" };
   ```
-  This test should be added alongside the FINDING-001 fix so both the implementation and the test are corrected together.
+  The spec (Section 9.5) specifies the fallback should be:
+  ```typescript
+  outcome = {
+    status: "success",
+    notes: `Stage completed: ${node.id}`,
+    contextUpdates: {
+      last_stage: node.id,
+      last_response: ccResult.text.slice(0, 200),
+    },
+  };
+  ```
+  The `last_stage` and `last_response` context keys are useful for downstream stages that need to observe what the previous node did (e.g., a conditional node or a codergen node whose prompt references `$context.last_response`). The current bare fallback provides no context to subsequent stages.
+- **Recommendation:** Update the fallback success case to match the spec, adding `notes` and `contextUpdates` with `last_stage` and `last_response`:
+  ```typescript
+  outcome = {
+    status: "success",
+    notes: `Stage completed: ${node.id}`,
+    contextUpdates: {
+      last_stage: node.id,
+      last_response: ccResult.text.slice(0, 200),
+    },
+  };
+  ```
+
+---
+
+### FINDING-003: Exit node handler failure is not reflected in `RunResult.status`
+
+- **Severity:** LOW
+- **Category:** Correctness
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:261-296`
+- **Description:** The terminal branch of the traversal loop executes the exit handler (an intentional spec extension documented in the code), then checks goal gates. However, `finalStatus` is only set to `"fail"` if a goal gate is unsatisfied or the goal gate retry limit is exceeded. If the exit handler returns `{ status: "fail" }`, the outcome is ignored with respect to `finalStatus`, and the pipeline reports `"success"` as long as goal gates are satisfied.
+
+  The `ExitHandler` always returns `{ status: "success" }`, so this has no effect in standard usage. But as a library, a user registering a custom exit handler could reasonably expect that returning `fail` causes the pipeline to fail. The current behavior is surprising and undocumented.
+- **Recommendation:** After executing the exit handler, propagate a `fail` outcome to `finalStatus` if no goal gate retry is triggered:
+  ```typescript
+  if (!gateResult.satisfied && retryTarget && ...) {
+    // retry
+  } else if (!gateResult.satisfied || exitOutcome.status === "fail") {
+    finalStatus = "fail";
+    break loop;
+  } else {
+    break loop;
+  }
+  ```
+  Alternatively, document explicitly (in a JSDoc comment on `run()` or in the code) that exit handler failures are intentionally ignored when goal gates pass.
+
+---
+
+### FINDING-004: `isStartNode` detection in runner.ts is inconsistent with `findStartNode`
+
+- **Severity:** LOW
+- **Category:** Correctness / Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:300`, `src/model/graph.ts:60-67`
+- **Description:** The runner excludes the start node from `completedNodes` and `nodeOutcomes` via this check:
+  ```typescript
+  const isStartNode = currentNode.shape === "Mdiamond" || currentNode.type === "start";
+  ```
+  But `findStartNode` (which determines _which_ node to start execution from) uses different criteria:
+  ```typescript
+  if (node.shape === "Mdiamond") return node;
+  return graph.nodes.get("start") ?? graph.nodes.get("Start") ?? null;
+  ```
+  The validation rule `startNodeRule` also recognizes `id === "start"` or `id === "Start"` as valid start nodes.
+
+  **Consequence:** A node with `id = "start"` (valid start node per spec) but without `shape === "Mdiamond"` and without an explicit `type = "start"` attribute would be:
+  - Correctly found as the start node by `findStartNode` ✓
+  - Correctly flagged as a start node by the validator ✓
+  - Incorrectly **included** in `completedNodes` and `nodeOutcomes` by the runner ✗
+
+  Including the start node in `nodeOutcomes` could trigger incorrect goal gate evaluation if the start node happens to have `goal_gate = true`, or create unexpected entries in checkpoint data.
+- **Recommendation:** Unify the start node detection. The simplest fix is to compare the current node against the result of `findStartNode`:
+  ```typescript
+  const isStartNode = currentNode.id === startNode.id;
+  ```
+  Or add `id === "start" || id === "Start"` to the `isStartNode` check to match `findStartNode`'s fallback logic.
+
+---
+
+### FINDING-005: `handlerTypeFor` in `runner.ts` duplicates `SHAPE_TO_TYPE` from `registry.ts`
+
+- **Severity:** TRIVIAL
+- **Category:** Code Quality
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:73-88`, `src/handlers/registry.ts:19-29`
+- **Description:** `runner.ts` contains a local `shapeMap` object used exclusively for emitting `stage_started` events:
+  ```typescript
+  const shapeMap: Record<string, string> = {
+    Mdiamond: "start",
+    Msquare: "exit",
+    box: "codergen",
+    hexagon: "wait.human",
+    diamond: "conditional",
+    component: "parallel",
+    tripleoctagon: "parallel.fan_in",
+    parallelogram: "tool",
+    house: "stack.manager_loop",
+  };
+  ```
+  This is identical (with one minor cosmetic difference: the comment) to `SHAPE_TO_TYPE` in `registry.ts`. If a new handler type is added, both maps must be updated, increasing the risk of inconsistency.
+- **Recommendation:** Import and reuse `SHAPE_TO_TYPE` from `registry.ts` in `handlerTypeFor`:
+  ```typescript
+  import { SHAPE_TO_TYPE } from "../handlers/registry.js";
+  // ...
+  return SHAPE_TO_TYPE[node.shape] ?? "default";
+  ```
+
+---
+
+### FINDING-006: Step label comment "e. CHECKPOINT" appears after steps f and g in `runner.ts`
+
+- **Severity:** TRIVIAL
+- **Category:** Code Quality
+- **Status:** OPEN
+- **File(s):** `src/engine/runner.ts:375-376`
+- **Description:** The spec defines the traversal loop steps in order: b (execute), c (record), d (apply context), e (checkpoint), f (select edge), g (loop restart), h (advance). The implementation intentionally reorders these — checkpoint is saved **after** edge selection (f) and loop restart check (g) so the checkpoint can record `edge.to` (the next node) directly. This is a valid design decision noted in the comment `"(save with nextNode = edge.to)"`.
+
+  However, the comment still uses the spec's letter "e" for the checkpoint step, which now appears between the code for steps g and h. This makes the code harder to audit for spec compliance — it looks like step e is out of order rather than being an intentional implementation choice.
+- **Recommendation:** Rename the comment to make the intentional deviation explicit:
+  ```typescript
+  // CHECKPOINT — intentionally placed after edge selection (spec step e)
+  // so we can record currentNode = edge.to (the node to resume from).
+  ```
+  This removes the misleading spec step letter and makes the reasoning transparent.
 
 ---
 
 ## Statistics
 
-- Total findings: 2
+- Total findings: 6
 - Critical: 0
 - High: 0
-- Medium: 0
-- Low: 2
-- Trivial: 0
+- Medium: 1
+- Low: 3
+- Trivial: 2
