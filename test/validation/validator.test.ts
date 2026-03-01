@@ -101,6 +101,18 @@ describe("validation", () => {
       const exitErrors = diags.filter(d => d.rule === "terminal_node" && d.severity === "error");
       expect(exitErrors.length).toBeGreaterThan(0);
     });
+
+    it("recognizes a node with type=exit as a terminal node", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("my_exit", { type: "exit" }),
+      ], [
+        { from: "s", to: "my_exit", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const terminalErrors = diags.filter(d => d.rule === "terminal_node" && d.severity === "error");
+      expect(terminalErrors).toHaveLength(0);
+    });
   });
 
   describe("startNoIncomingRule", () => {
@@ -134,6 +146,40 @@ describe("validation", () => {
       const diags = validate(graph);
       const rule = diags.filter(d => d.rule === "exit_no_outgoing" && d.severity === "error");
       expect(rule.length).toBeGreaterThan(0);
+    });
+
+    it("errors when a second terminal node has outgoing edges", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A" }),
+        makeNode("e1", { shape: "Msquare" }),
+        makeNode("end"),  // recognized as terminal by id
+      ], [
+        { from: "s", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "e1", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        // "end" has an outgoing edge — should be caught even though e1 is valid
+        { from: "end", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "exit_no_outgoing" && d.severity === "error");
+      expect(rule.length).toBeGreaterThan(0);
+      expect(rule.some(d => d.nodeId === "end")).toBe(true);
+    });
+
+    it("errors when a type=exit node has outgoing edges", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A" }),
+        makeNode("my_exit", { type: "exit" }),
+      ], [
+        { from: "s", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "my_exit", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "my_exit", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "exit_no_outgoing" && d.severity === "error");
+      expect(rule.length).toBeGreaterThan(0);
+      expect(rule[0].nodeId).toBe("my_exit");
     });
   });
 

@@ -53,7 +53,7 @@ This is the fourteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** MEDIUM
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/validation/rules.ts:40-54`, `src/model/graph.ts:78-80`
 - **Description:** `isTerminal()` (graph.ts:78) identifies terminal nodes as:
   ```ts
@@ -81,7 +81,7 @@ This is the fourteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** MEDIUM
 - **Category:** Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/validation/rules.ts:72-86`, `src/model/graph.ts:69-75`
 - **Description:** `exitNoOutgoingRule` calls `findExitNode(graph)` which returns the **first** terminal node found (graph.ts:69-75 iterates `graph.nodes.values()` and returns on first `Msquare` match, then falls back to id-based lookups). If a graph has multiple terminal nodes, only the first one is validated for outgoing edges. A second exit node with outgoing edges would pass validation silently.
 

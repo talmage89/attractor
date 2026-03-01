@@ -1,7 +1,6 @@
 import type { Graph } from "../model/graph.js";
 import {
   findStartNode,
-  findExitNode,
   incomingEdges,
   outgoingEdges,
   reachableFrom,
@@ -39,14 +38,14 @@ function startNodeRule(graph: Graph): Diagnostic[] {
 
 function terminalNodeRule(graph: Graph): Diagnostic[] {
   const exitNodes = [...graph.nodes.values()].filter(
-    (n) => n.shape === "Msquare" || n.id === "exit" || n.id === "end"
+    (n) => n.shape === "Msquare" || n.type === "exit" || n.id === "exit" || n.id === "end"
   );
   if (exitNodes.length === 0) {
     return [
       {
         rule: "terminal_node",
         severity: "error",
-        message: "Graph has no exit node (shape=Msquare or id=exit/end)",
+        message: "Graph has no exit node (shape=Msquare, type=exit, or id=exit/end)",
       },
     ];
   }
@@ -70,19 +69,17 @@ function startNoIncomingRule(graph: Graph): Diagnostic[] {
 }
 
 function exitNoOutgoingRule(graph: Graph): Diagnostic[] {
-  const exit = findExitNode(graph);
-  if (!exit) return [];
-  if (outgoingEdges(graph, exit.id).length > 0) {
-    return [
-      {
-        rule: "exit_no_outgoing",
-        severity: "error",
-        message: "Exit node must not have outgoing edges",
-        nodeId: exit.id,
-      },
-    ];
-  }
-  return [];
+  const exitNodes = [...graph.nodes.values()].filter(
+    (n) => n.shape === "Msquare" || n.type === "exit" || n.id === "exit" || n.id === "end"
+  );
+  return exitNodes
+    .filter((exit) => outgoingEdges(graph, exit.id).length > 0)
+    .map((exit) => ({
+      rule: "exit_no_outgoing",
+      severity: "error" as const,
+      message: "Exit node must not have outgoing edges",
+      nodeId: exit.id,
+    }));
 }
 
 function reachabilityRule(graph: Graph): Diagnostic[] {
