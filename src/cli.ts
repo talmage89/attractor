@@ -47,8 +47,10 @@ export function formatEvent(event: PipelineEvent, startTime: number): string {
       const cost = formatCost(event.costUsd);
       return `${ts} ● ${event.nodeId} → ${event.outcome.status} (${durationS}s${cost})`;
     }
-    case "edge_selected":
-      return `${ts}   → edge "${event.label}" → ${event.to}`;
+    case "edge_selected": {
+      const labelPart = event.label ? ` "${event.label}"` : "";
+      return `${ts}  →${labelPart} → ${event.to}`;
+    }
     case "human_question":
       return `${ts} [?] ${event.question.text}`;
     case "warning":
@@ -95,6 +97,7 @@ async function cmdRun(args: string[]): Promise<void> {
   });
 
   const graph = parse(source as string);
+  applyTransforms(graph);
   const diags = validate(graph);
   const errors = diags.filter((d) => d.severity === "error");
   for (const d of diags) {

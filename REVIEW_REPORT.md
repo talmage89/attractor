@@ -18,7 +18,7 @@ This is the thirteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** LOW
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED — added `applyTransforms(graph)` before `validate(graph)` in `cmdRun` (cli.ts line 98).
 - **File(s):** `src/cli.ts:96-103`
 - **Description:** The two validation commands behave inconsistently with respect to graph transforms. `cmdValidate` calls `applyTransforms(graph)` before `validate(graph)`, so the user sees diagnostics on the fully-transformed graph. `cmdRun` calls `validate(graph)` on the raw, untransformed graph (transforms are applied later, inside `run()`):
 
@@ -47,7 +47,7 @@ This is the thirteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED — updated `edge_selected` format in `formatEvent` to omit the label clause when label is empty.
 - **File(s):** `src/cli.ts:49-51`
 - **Description:** In `formatEvent`, the `edge_selected` case always includes the edge label in quotes:
 
@@ -79,7 +79,7 @@ This is the thirteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED — added a clarifying comment to `Interviewer.inform()` noting it is intended for external consumer implementations, not called internally.
 - **File(s):** `src/interviewer/interviewer.ts:7`, `src/handlers/wait-human.ts`
 - **Description:** The `Interviewer` interface exposes an `inform(message: string, stage: string): void` method, and both `ConsoleInterviewer` and `AutoApproveInterviewer`/`QueueInterviewer` implement it. However, no production handler in the codebase ever calls `interviewer.inform(...)`. It is only exercised in the interviewer unit tests (to verify the method doesn't throw). The method signature and implementation are correct; the method is simply unused.
 
