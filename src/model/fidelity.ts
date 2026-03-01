@@ -25,8 +25,8 @@ export function resolveThreadId(
   incomingEdge?: Edge,
   previousNodeId?: string
 ): string {
-  if (node.threadId) return node.threadId;
   if (incomingEdge?.threadId) return incomingEdge.threadId;
+  if (node.threadId) return node.threadId;
   if (node.className) return node.className.split(",")[0].trim();
   return previousNodeId ?? node.id;
 }

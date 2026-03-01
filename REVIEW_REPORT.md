@@ -16,7 +16,7 @@ The codebase is in excellent shape after five prior review cycles with all previ
 
 - **Severity:** LOW
 - **Category:** Spec Compliance / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/model/fidelity.ts:22-32`
 - **Description:** `resolveFidelity` correctly gives edge-level fidelity the highest priority (edge → node → graph → default). However, `resolveThreadId` has a different priority order: node-level `threadId` is checked *before* the incoming edge's `threadId`:
   ```typescript
