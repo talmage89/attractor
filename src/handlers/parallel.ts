@@ -4,7 +4,6 @@ import type { Context } from "../model/context.js";
 import type { Outcome } from "../model/outcome.js";
 import type { Handler, RunConfig } from "../handlers/registry.js";
 import { HandlerRegistry } from "../handlers/registry.js";
-import type { SessionManager } from "../backend/session-manager.js";
 import { selectEdge } from "../engine/edge-selection.js";
 import { buildRetryPolicy, executeWithRetry } from "../engine/retry.js";
 
@@ -69,7 +68,6 @@ export async function executeBranch(
 export class ParallelHandler implements Handler {
   constructor(
     private registry: HandlerRegistry,
-    private sessionManager?: SessionManager,
   ) {}
 
   async execute(
