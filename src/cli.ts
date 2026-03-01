@@ -87,8 +87,10 @@ async function cmdRun(args: string[]): Promise<void> {
   });
 
   const graph = parse(source as string);
-  // Note: run() applies applyTransforms internally; we skip it here to avoid
-  // double application. cmdValidate applies it because it never calls run().
+  // Apply transforms before validation so rules operate on the expanded graph
+  // (e.g. $goal placeholders replaced, stylesheet defaults applied).
+  // applyTransforms is idempotent, so the second call inside run() is a no-op.
+  applyTransforms(graph);
 
   const diags = validate(graph);
   const errors = diags.filter((d) => d.severity === "error");

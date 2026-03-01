@@ -56,10 +56,11 @@ This is a fresh second-pass review conducted after all 15 findings from the firs
 
 - **Severity:** MEDIUM
 - **Category:** Spec Compliance
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/cli.ts:87-97`
 - **Description:** The spec (Section 15, `attractor run` steps 1-3) specifies: "1. Read and parse the DOT file. 2. Apply transforms. 3. Validate." In `cmdRun`, `validate(graph)` is called at line 90 before `run()`, which applies transforms internally. So validation happens on the untransformed graph: `$goal` placeholders have not been expanded in node prompts, and stylesheet rules have not been applied. A stylesheet syntax validation would still catch problems (since `stylesheetSyntaxRule` re-parses the stylesheet string). However, the validation results are technically operating on a different state than what the engine will actually use, which is confusing and may give incorrect results as new rules are added.
 - **Recommendation:** Call `applyTransforms(graph)` in `cmdRun` before `validate()`. Since `applyTransforms` is idempotent (the second call inside `run()` is a no-op), double application is safe. Update the comment at line 87 accordingly.
+- **Fix:** Added `applyTransforms(graph)` call between `parse()` and `validate()` in `cmdRun`. Updated the comment to explain that `applyTransforms` is idempotent so the second call inside `run()` is a no-op. All 241 tests pass.
 
 ---
 
