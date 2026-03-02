@@ -145,6 +145,13 @@ export async function run(config: RunConfig): Promise<RunResult> {
   if (config.resumeFromCheckpoint) {
     const checkpoint = await loadCheckpoint(config.resumeFromCheckpoint);
     completedNodes = checkpoint.completedNodes;
+    // If the resume node is already in completedNodes it means the prior run
+    // ended at a failed node (pushed before edge selection returned null).
+    // Remove it so re-execution on resume doesn't create a duplicate entry.
+    const resumeNodeIdx = completedNodes.lastIndexOf(checkpoint.currentNode);
+    if (resumeNodeIdx !== -1) {
+      completedNodes.splice(resumeNodeIdx, 1);
+    }
     // Restore nodeOutcomes
     for (const [k, v] of Object.entries(checkpoint.nodeOutcomes)) {
       nodeOutcomes.set(k, v as Outcome);

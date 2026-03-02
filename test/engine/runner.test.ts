@@ -951,6 +951,63 @@ describe("execution engine", () => {
     expect(result.completedNodes).toContain("join");
   });
 
+  it("resume after failed node does not duplicate it in completedNodes", async () => {
+    // BUG-007: when a run ends at a failed node the final checkpoint has that
+    // node in BOTH currentNode and completedNodes. On resume, the node was
+    // re-appended after successful re-execution, creating a duplicate.
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test BUG-007 resume dedup"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        step1 [shape=box]
+        fixer [shape=box]
+        step3 [shape=box]
+        s -> step1 -> fixer -> step3 -> e
+      }
+    `);
+
+    const logsRoot = path.join(tmpDir, "logs");
+    await fs.mkdir(logsRoot, { recursive: true });
+
+    // Simulate the final checkpoint from a run where fixer failed (no fail-path
+    // edge) — fixer appears in both currentNode and completedNodes.
+    await saveCheckpoint({
+      timestamp: Date.now(),
+      currentNode: "fixer",
+      completedNodes: ["step1", "fixer"],
+      nodeOutcomes: {
+        step1: { status: "success" },
+        fixer: { status: "fail", failureReason: "oops" },
+      },
+      nodeRetries: {},
+      contextValues: { "graph.goal": "Test BUG-007 resume dedup", outcome: "fail" },
+      sessionMap: {},
+    }, logsRoot);
+
+    // On resume fixer succeeds this time
+    const registry = new HandlerRegistry({
+      async execute(): Promise<Outcome> { return { status: "success" }; },
+    });
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot,
+      interviewer: noopInterviewer,
+      resumeFromCheckpoint: path.join(logsRoot, "checkpoint.json"),
+      registry,
+    });
+
+    expect(result.status).toBe("success");
+    // fixer must appear exactly once — not twice
+    expect(result.completedNodes.filter((id) => id === "fixer")).toHaveLength(1);
+    // The full expected order is: step1 (restored), fixer (re-executed), step3
+    expect(result.completedNodes).toContain("step1");
+    expect(result.completedNodes).toContain("fixer");
+    expect(result.completedNodes).toContain("step3");
+  });
+
   it("emits a warning when checkpoint currentNode is not found in graph", async () => {
     const graph = parse(`
       digraph G {

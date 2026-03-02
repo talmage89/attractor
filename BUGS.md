@@ -1,13 +1,13 @@
 ## BUG-007: Resume from failed run duplicates the failed node in `completedNodes`
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / Checkpoint and Resume (#6)
 - **File(s):** `src/engine/runner.ts`
 - **Description:** When a pipeline run ends with a failed node (e.g., a tool node that exits non-zero with no fail-path edge), the final checkpoint records that node in BOTH `currentNode` AND `completedNodes`. On resume, the runner restores `completedNodes` from the checkpoint (which already includes the failed node), then re-executes the node (since `currentNode` points to it). If the re-execution succeeds, the runner appends the node to `completedNodes` again, resulting in a duplicate entry.
 - **Expected:** After a failed run + resume + successful re-execution, each node should appear exactly once in `completedNodes`. `Completed nodes: step1, fixer, step3` (not `step1, fixer, fixer, step3`).
 - **Actual:** The failed node appears twice: `Completed nodes: step1, fixer, fixer, step3`. The duplicate also persists in the final checkpoint's `completedNodes` array and `contextValues.__completedNodes` JSON string.
 - **Reproduction:** Pipeline: `start → step1 → fixer [cat /tmp/missing.txt] → step3 → end`. Run once (fixer fails). Then create `/tmp/missing.txt` and resume. Output shows `fixer` twice in completed nodes.
-- **Proposed fix:** In the checkpoint restore section of `runner.ts`, after restoring `completedNodes`, check if `checkpoint.currentNode` is already present in the array (which happens when the run ended at a failed node). If so, remove it before re-executing — the node will be re-added after the new execution.
+- **Fix:** In the checkpoint restore block of `runner.ts`, after restoring `completedNodes`, use `lastIndexOf(checkpoint.currentNode)` to find and `splice` out the resume node if it is already present. Using `lastIndexOf` handles cycles correctly (removes only the most recent occurrence). The node is re-added to `completedNodes` after successful re-execution. Added regression test in `runner.test.ts`. 364 tests passing.
 
 ---
 
