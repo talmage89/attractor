@@ -27,9 +27,12 @@ Attractor parses this graph, validates it, and executes each node in order — s
 ## Installation
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
+pnpm link --global
 ```
+
+This makes the `attractor` command available globally.
 
 ## Usage
 
@@ -220,9 +223,10 @@ src/
 ## Development
 
 ```bash
-npm test              # Run tests
-npm run test:watch    # Watch mode
-npm run build         # Compile TypeScript
+pnpm test              # Run tests
+pnpm run test:watch    # Watch mode
+pnpm run build         # Compile TypeScript
+pnpm run typecheck     # Type-check without emitting
 ```
 
 The test suite covers parsing, validation, edge selection, transforms, handlers, state management, and end-to-end pipeline execution.
