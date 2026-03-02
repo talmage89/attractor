@@ -317,6 +317,22 @@ function nodeIdSafeRule(graph: Graph): Diagnostic[] {
   return diags;
 }
 
+function invalidDefaultMaxRetryRule(graph: Graph): Diagnostic[] {
+  const raw = graph.attributes.raw.get("default_max_retry");
+  if (raw === undefined) return [];
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed)) {
+    return [
+      {
+        rule: "invalid_default_max_retry",
+        severity: "warning",
+        message: `default_max_retry "${raw}" is not a valid integer; using default (50)`,
+      },
+    ];
+  }
+  return [];
+}
+
 function promptOnLlmNodesRule(graph: Graph): Diagnostic[] {
   const diags: Diagnostic[] = [];
   for (const node of graph.nodes.values()) {
@@ -350,4 +366,5 @@ export const BUILT_IN_RULES: LintRule[] = [
   goalGateHasRetryRule,
   nodeIdSafeRule,
   promptOnLlmNodesRule,
+  invalidDefaultMaxRetryRule,
 ];

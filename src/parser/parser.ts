@@ -527,7 +527,15 @@ class Parser {
       case "goal": this.graph.attributes.goal = value; break;
       case "label": this.graph.attributes.label = value; break;
       case "model_stylesheet": this.graph.attributes.modelStylesheet = value; break;
-      case "default_max_retry": this.graph.attributes.defaultMaxRetry = parseInt(value, 10); break;
+      case "default_max_retry": {
+        const parsed = parseInt(value, 10);
+        // Only overwrite the default if the value is a valid integer; otherwise
+        // keep the default (50) and let the validator emit a warning (BUG-018).
+        if (!Number.isNaN(parsed)) {
+          this.graph.attributes.defaultMaxRetry = parsed;
+        }
+        break;
+      }
       case "retry_target": this.graph.attributes.retryTarget = value; break;
       case "fallback_retry_target": this.graph.attributes.fallbackRetryTarget = value; break;
       case "default_fidelity": this.graph.attributes.defaultFidelity = value; break;

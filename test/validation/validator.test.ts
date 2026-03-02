@@ -758,6 +758,67 @@ describe("validation", () => {
     });
   });
 
+  describe("invalidDefaultMaxRetryRule (BUG-018)", () => {
+    it("warns when default_max_retry is a non-integer string", () => {
+      const graph = parse(`
+        digraph G {
+          default_max_retry = "invalid"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_default_max_retry");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("invalid");
+      expect(rule[0].message).toContain("50");
+    });
+
+    it("warns when default_max_retry is an empty string", () => {
+      const graph = parse(`
+        digraph G {
+          default_max_retry = ""
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_default_max_retry");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+    });
+
+    it("does not warn when default_max_retry is a valid integer", () => {
+      const graph = parse(`
+        digraph G {
+          default_max_retry = "5"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_default_max_retry");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not warn when default_max_retry is absent", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_default_max_retry");
+      expect(rule).toHaveLength(0);
+    });
+  });
+
   describe("valid pipelines pass cleanly", () => {
     it("three-node linear pipeline has no errors", () => {
       const graph = parse(`

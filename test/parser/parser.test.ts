@@ -302,4 +302,44 @@ describe("parser", () => {
       expect(edge?.label).toBe("success route");
     });
   });
+
+  describe("default_max_retry parsing (BUG-018)", () => {
+    it("falls back to default (50) when default_max_retry is a non-integer string", () => {
+      const graph = parse(`
+        digraph G {
+          default_max_retry = "invalid"
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      // Invalid value → must not store NaN; default 50 must be preserved
+      expect(graph.attributes.defaultMaxRetry).toBe(50);
+      expect(Number.isNaN(graph.attributes.defaultMaxRetry)).toBe(false);
+    });
+
+    it("falls back to default (50) when default_max_retry is an empty string", () => {
+      const graph = parse(`
+        digraph G {
+          default_max_retry = ""
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      expect(graph.attributes.defaultMaxRetry).toBe(50);
+    });
+
+    it("correctly parses a valid integer default_max_retry", () => {
+      const graph = parse(`
+        digraph G {
+          default_max_retry = "5"
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      expect(graph.attributes.defaultMaxRetry).toBe(5);
+    });
+  });
 });
