@@ -238,13 +238,6 @@ The test suite covers parsing, validation, edge selection, transforms, handlers,
 
 Everything else — the DOT parser, stylesheet engine, condition evaluator, and CLI — is implemented from scratch with zero additional runtime dependencies.
 
-## Documentation
-
-- [`docs/SPEC.md`](docs/SPEC.md) — Complete implementation specification
-- [`docs/phases/`](docs/phases/) — Phase-by-phase implementation breakdown
-- [`docs/TESTING.md`](docs/TESTING.md) — Usage testing guide
-- [`docs/BUGS.md`](docs/BUGS.md) — Bug tracker
-
 ## License
 
 See [StrongDM's Attractor NLSpec](https://github.com/strongdm/attractor) for the original specification license.
