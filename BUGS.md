@@ -1,3 +1,19 @@
+## BUG-010: `goalGateRetries` counter not persisted in checkpoint — retry budget resets on resume
+
+- **Status:** OPEN
+- **Found during:** Testing / Goal Gate Retry Count Across Resume (#23)
+- **File(s):** `src/engine/runner.ts`
+- **Description:** The `goalGateRetries` variable is initialized to `0` at the start of every `run()` call (line 204) and is never included in any `saveCheckpoint()` call. As a result, resuming a pipeline (via `--resume`) always resets the goal gate retry counter to 0, regardless of how many retries were used in the previous session.
+- **Expected:** The goal gate retry counter should be persisted in the checkpoint (like `nodeRetries` is) so that the total number of goal gate retries across all sessions for a given run does not exceed `default_max_retry`.
+- **Actual:** Two problematic scenarios:
+  1. **Kill mid-retry + resume**: If a pipeline with `default_max_retry=1` runs, goal gate fires (1 retry used), user kills during the 2nd attempt, then resumes — the resumed run allows another full `default_max_retry=1` retries (2 more counter executions). Total: 4 executions instead of 2.
+  2. **Resume from completed-fail**: Resuming from a checkpoint where `currentNode=end` (a completed-fail run that exhausted its retry budget) re-runs the exit handler, which triggers the goal gate again with a reset counter of 0, allowing more retries before failing. Total: additional executions beyond the user's configured limit.
+  - Only affects `default_max_retry >= 1`. With `default_max_retry=0`, no retries are allowed in any session so the bug has no effect.
+- **Reproduction:** Create a DOT file with `default_max_retry=1`, `retry_target="start"`, and an always-failing tool node with `goal_gate=true`. (1) Run it — confirms 2 executions. (2) Kill during the 2nd execution and resume — confirms 2 more executions (4 total instead of 2). (3) Resume from the completed-fail checkpoint — confirms yet another execution.
+- **Fix:** Add `goalGateRetries` to the checkpoint structure (in `src/model/checkpoint.ts`) and persist/restore it in `src/engine/runner.ts`.
+
+---
+
 ## BUG-009: Resume with missing checkpoint node leaves stale `completedNodes`, causing duplicates
 
 - **Status:** FIXED
