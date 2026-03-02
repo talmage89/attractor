@@ -19,11 +19,20 @@ export async function runShellCommand(
   return new Promise((resolve) => {
     let timedOut = false;
 
-    // Use detached:true so we can kill the entire process group (kills child processes too)
-    const child = spawn("/bin/sh", ["-c", command], {
-      cwd: options.cwd,
-      detached: true,
-    });
+    // Use detached:true so we can kill the entire process group (kills child processes too).
+    // spawn() can throw synchronously (e.g. ENOTDIR when cwd is a file path). Wrap in
+    // try/catch so the Promise resolves with a fail result instead of rejecting, which
+    // would cause executeWithRetry to treat the spawn error as a transient error and retry.
+    let child;
+    try {
+      child = spawn("/bin/sh", ["-c", command], {
+        cwd: options.cwd,
+        detached: true,
+      });
+    } catch (err) {
+      resolve({ stdout: "", stderr: (err as Error).message, exitCode: 1, timedOut: false });
+      return;
+    }
 
     let stdout = "";
     let stderr = "";

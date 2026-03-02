@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { ToolHandler } from "../../src/handlers/tool.js";
+import { ToolHandler, runShellCommand } from "../../src/handlers/tool.js";
 import { Context } from "../../src/model/context.js";
 import type { GraphNode } from "../../src/model/graph.js";
 
@@ -109,6 +109,19 @@ describe("ToolHandler", () => {
     const outcome = await handler.execute(node, new Context(), {} as any, config(tmpDir) as any);
     expect(outcome.status).toBe("fail");
     expect(outcome.contextUpdates?.["tool.stderr"]).toContain("failure details");
+  });
+
+  it("resolves with fail (not rejects) when cwd is a file path (ENOTDIR)", async () => {
+    // spawn() throws synchronously with ENOTDIR when cwd is a file, not a directory.
+    // Without the try/catch fix, this would reject the Promise, causing executeWithRetry
+    // to treat it as a transient error and retry 50 times.
+    const file = path.join(tmpDir, "not-a-dir.txt");
+    await fs.writeFile(file, "hello");
+    // Should resolve (not reject) with a fail result
+    const result = await runShellCommand("echo hello", { cwd: file, timeoutMs: 5000 });
+    expect(result.exitCode).toBe(1);
+    expect(result.timedOut).toBe(false);
+    expect(result.stderr).toMatch(/ENOTDIR|not a directory/i);
   });
 
   it("uses custom timeout from node", async () => {
