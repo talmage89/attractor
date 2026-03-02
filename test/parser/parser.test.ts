@@ -130,6 +130,15 @@ describe("parser", () => {
       // label "Main Loop" → class "main-loop"
       expect(plan?.className).toContain("main-loop");
     });
+
+    it("applies derived class to nodes declared before label = (BUG-013)", () => {
+      const graph = parse(fixtures.WITH_SUBGRAPH_LABEL_AFTER_NODES);
+      const before = graph.nodes.get("before_node");
+      const after = graph.nodes.get("after_node");
+      // both nodes should get class "highlight" regardless of label= placement
+      expect(before?.className).toContain("highlight");
+      expect(after?.className).toContain("highlight");
+    });
   });
 
   describe("comments", () => {

@@ -96,6 +96,22 @@ digraph Sub {
 }
 `;
 
+// BUG-013: nodes declared BEFORE label = ... must also get the derived class
+export const WITH_SUBGRAPH_LABEL_AFTER_NODES = `
+digraph Sub2 {
+  start [shape=Mdiamond]
+  exit  [shape=Msquare]
+
+  subgraph cluster_section {
+    before_node [type=tool]
+    label = "highlight"
+    after_node [type=tool]
+  }
+
+  start -> before_node -> after_node -> exit
+}
+`;
+
 export const WITH_COMMENTS = `
 // This is a comment
 digraph Commented {

@@ -1,6 +1,6 @@
 ## BUG-013: Subgraph class derivation skips nodes declared before `label =` statement
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / Subgraph Features (#30)
 - **File(s):** `src/parser/parser.ts`
 - **Description:** When a subgraph has a `label =` attribute, the parser derives a class name and adds it to all nodes inside the subgraph. However, the parser processes statements sequentially, so nodes declared **before** the `label =` statement are built before the class is pushed onto `subgraphClassStack`. As a result, those nodes receive an empty `className` and are NOT targeted by stylesheet class selectors (`.derived-class { ... }`) and do NOT derive a `thread_id` via class-based thread resolution.
@@ -16,7 +16,7 @@
   }
   ```
   Parse and inspect: `before_node.className=""`, `after_node.className="highlight"`. Only `after_node` gets `llm_model: highlighted-model` from the stylesheet. If these were codergen nodes, `before_node` would silently use the wrong model or fail to share a thread session.
-- **Fix:** In `parseSubgraph()`, scan the subgraph body for a `label =` token **before** parsing statements (two-pass approach), derive the class name upfront, push it onto `subgraphClassStack` before any `parseStatement()` calls, then restore on exit. This ensures all nodes inside the subgraph get the class regardless of label placement.
+- **Fix:** Added `findSubgraphLabel()` lookahead helper in `parser.ts` that scans ahead (tracking brace/bracket depth) to find the top-level `label = ...` in the subgraph body without consuming tokens. `parseSubgraph()` now calls it upfront and pushes the derived class onto `subgraphClassStack` before parsing any statements (two-pass approach). The existing `label = ...` consumer in the loop skips the class-push since it was already done. Added fixture `WITH_SUBGRAPH_LABEL_AFTER_NODES` and regression test. 369 tests passing.
 
 ---
 

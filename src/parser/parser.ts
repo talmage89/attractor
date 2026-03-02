@@ -225,6 +225,36 @@ class Parser {
     this.advance();
   }
 
+  // Scan ahead (without consuming tokens) to find the top-level `label = ...`
+  // assignment within the current subgraph body. Returns the label value or "".
+  // Tracks brace and bracket depth so nested subgraphs and attr blocks are skipped.
+  private findSubgraphLabel(): string {
+    let braceDepth = 0;
+    let bracketDepth = 0;
+    let i = this.pos;
+    while (i < this.tokens.length) {
+      const t = this.tokens[i];
+      if (t.kind === "LBRACE") { braceDepth++; }
+      else if (t.kind === "RBRACE") {
+        if (braceDepth === 0) break; // end of current subgraph
+        braceDepth--;
+      } else if (t.kind === "LBRACKET") { bracketDepth++; }
+      else if (t.kind === "RBRACKET") { bracketDepth--; }
+      else if (braceDepth === 0 && bracketDepth === 0 &&
+               t.kind === "IDENTIFIER" && t.value === "label") {
+        if (i + 1 < this.tokens.length && this.tokens[i + 1].kind === "EQUALS") {
+          const valIdx = i + 2;
+          if (valIdx < this.tokens.length) {
+            const val = this.tokens[valIdx];
+            if (val.kind === "STRING" || val.kind === "IDENTIFIER") return val.value;
+          }
+        }
+      }
+      i++;
+    }
+    return "";
+  }
+
   private parseSubgraph(): void {
     this.match("SUBGRAPH");
 
@@ -240,34 +270,27 @@ class Parser {
     const parentEdge = new Map(this.edgeDefaults);
     this.defaultsStack.push({ node: new Map(parentNode), edge: new Map(parentEdge) });
 
-    // Parse subgraph attributes (label = ...) before inner node statements
-    // We'll handle label by scanning for "label = ..." within the subgraph
-    // Actually, label can appear as an attribute. We parse inner statements
-    // and track when label is set.
-
-    // We need to capture the subgraph's own label. We look for "label" as a
-    // standalone key=value in the subgraph body.
-    let subgraphLabel = "";
-
-    // Parse inner statements, collecting the subgraph label if set
     const savedClass = [...this.subgraphClassStack];
+
+    // Two-pass: scan ahead for label = ... so that nodes declared BEFORE the
+    // label statement still receive the derived class (BUG-013).
+    const subgraphLabel = this.findSubgraphLabel();
+    if (subgraphLabel) {
+      this.subgraphClassStack.push(deriveClassName(subgraphLabel));
+    }
 
     while (!this.check("RBRACE") && !this.check("EOF")) {
       const t = this.peek();
 
-      // Check for label = "..." at subgraph top-level
+      // Consume top-level `label = ...` without re-pushing to the class stack
+      // (class was already pushed by the lookahead above).
       if (t.kind === "IDENTIFIER" && t.value === "label") {
-        // peek further to see if this is label = value
         const nextPos = this.pos + 1;
         if (nextPos < this.tokens.length && this.tokens[nextPos].kind === "EQUALS") {
           this.advance(); // consume "label"
           this.advance(); // consume "="
-          subgraphLabel = this.parseValue();
+          this.parseValue();
           this.consumeOptionalSemicolon();
-          if (subgraphLabel) {
-            const cls = deriveClassName(subgraphLabel);
-            this.subgraphClassStack.push(cls);
-          }
           continue;
         }
       }
