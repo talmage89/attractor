@@ -440,6 +440,20 @@ describe("validation", () => {
       const rule = diags.filter(d => d.rule === "prompt_on_llm_nodes");
       expect(rule).toHaveLength(0);
     });
+
+    it("does not warn on typed nodes (start, tool, exit, conditional, etc.)", () => {
+      const graph = parse(`
+        digraph G {
+          s [type=start]
+          w [type=tool, cmd="echo hi"]
+          e [type=exit]
+          s -> w -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_on_llm_nodes");
+      expect(rule).toHaveLength(0);
+    });
   });
 
   describe("nodeIdSafeRule", () => {
