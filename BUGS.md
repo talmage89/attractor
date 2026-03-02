@@ -1,3 +1,16 @@
+## BUG-006: Invalid `model_stylesheet` causes Fatal crash instead of `[error]` diagnostic
+
+- **Status:** OPEN
+- **Found during:** Testing / Stylesheet Application (#10)
+- **File(s):** `src/engine/transforms.ts`
+- **Description:** `applyTransforms()` calls `parseStylesheet(stylesheet)` without wrapping it in try/catch. If the stylesheet string is syntactically invalid (e.g., `"* llm_model: bad }"`), `parseStylesheet` throws, which propagates up as an uncaught exception through `cmdValidate` and `cmdRun`. The global error handler in `main()` catches it and prints `"Fatal: Expected '{' after selector at position 2"` with exit code 3. The expected behavior is that `stylesheetSyntaxRule` in the validator catches the parse error and returns an `[error] (stylesheet_syntax)` diagnostic with exit code 2 for `cmdValidate`.
+- **Expected:** `attractor validate <file>` with invalid stylesheet should output `[error] (stylesheet_syntax) Invalid stylesheet syntax: Expected '{' after selector at position 2` with exit code 2. `attractor run <file>` should output the same diagnostic and exit 2 without running.
+- **Actual:** Both `validate` and `run` output `Fatal: Expected '{' after selector at position 2` with exit code 3, bypassing the validator entirely.
+- **Reproduction:** Create a DOT file with `model_stylesheet = "* llm_model: bad }"` (missing `{`). Run `attractor validate <file>`. Gets "Fatal:" instead of `[error] (stylesheet_syntax)`.
+- **Fix:** Wrap the `parseStylesheet(stylesheet)` call in `applyTransforms` in a try/catch. On error, skip stylesheet application silently — the validator's `stylesheetSyntaxRule` will detect and report the error. This allows `cmdValidate` to report a proper diagnostic, and `cmdRun` to exit gracefully after validation fails.
+
+---
+
 ## BUG-005: Condition evaluator does not trim resolved context values before comparison
 
 - **Status:** FIXED
