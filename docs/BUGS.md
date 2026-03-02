@@ -1,3 +1,29 @@
+## BUG-016: Quoted node IDs silently discarded — produces empty graph with misleading validation errors
+
+- **Status:** OPEN
+- **Found during:** Testing / Malformed DOT Files (#36)
+- **File(s):** `src/parser/parser.ts`
+- **Description:** When a DOT file uses quoted strings as node IDs (e.g., `"start" [shape=Mdiamond]`), the parser silently discards these declarations without any error or warning. This is because `parseStatement()` handles `IDENTIFIER` tokens as node/edge starts, but when it sees a `STRING` token (a quoted identifier) it falls through to the `// Skip unknown tokens; this.advance()` catch-all, consuming just the token and moving on. As a result, the entire quoted-ID node declaration is silently dropped.
+- **Expected:** Either (a) quoted strings should be accepted as valid node IDs (DOT format supports this), or (b) the parser should throw a clear parse error like `"Parse error: quoted string identifiers are not supported as node IDs at line N"`. The current behavior of silently discarding is never correct — users should always get a clear diagnostic.
+- **Actual:** Two failure modes depending on usage:
+  1. **All-quoted node IDs** (e.g., `"start" [shape=Mdiamond]` `"work" -> "end"`): The parser silently discards every statement, producing an empty graph (0 nodes, 0 edges). The validator then reports misleading errors: `[error] (start_node) Graph has no start node` and `[error] (terminal_node) Graph has no exit node`. No parse error is emitted; the CLI exits with code 2 instead of code 3.
+  2. **Mixed: unquoted source → quoted target in edge** (e.g., `start -> "work"`): The parser starts parsing the edge (since `start` is an IDENTIFIER), then throws `Fatal: Parse error: expected identifier after '->' at line N` when it encounters the STRING token as the edge target. This gives a clear but cryptic parse error (exit code 3).
+- **Reproduction:**
+  ```dot
+  digraph g {
+    "start" [shape=Mdiamond]
+    "work" [type=tool tool_command="echo hi"]
+    "end" [shape=Msquare]
+    "start" -> "work"
+    "work" -> "end"
+  }
+  ```
+  Run: `attractor validate test.dot`. Outputs `[error] (start_node) Graph has no start node` despite `"start"` being declared with `shape=Mdiamond`. No parse error — the entire graph body was silently dropped.
+- **Root cause:** `parseStatement()` in `parser.ts` only handles `IDENTIFIER` tokens as node/edge statement starts. When the first token of a statement is `STRING` (a quoted identifier like `"start"`), the default `this.advance()` branch silently skips it. The subsequent `[shape=Mdiamond]` attribute block, `->` edge tokens, etc. are also silently consumed one token at a time by repeated calls to `this.advance()`, so no error is ever thrown.
+- **Fix:** In `parseStatement()`, add a `STRING` branch alongside `IDENTIFIER` to call `parseIdentifierStatement()`. This would require also updating `parseIdentifierStatement()` to accept STRING tokens as edge targets (after `->`). This makes the parser accept quoted node IDs as valid identifiers — consistent with the full DOT spec. Alternatively, detect `STRING` at the start of a statement and throw a clear parse error.
+
+---
+
 ## BUG-015: `spawn ENOTDIR` (file path as `--cwd`) silently retries 51 times with exponential backoff, hanging for many minutes
 
 - **Status:** FIXED
