@@ -1,3 +1,32 @@
+## BUG-017: Multiple attribute blocks on the same node/edge statement — only first block is parsed
+
+- **Status:** OPEN
+- **Found during:** Testing / DOT Default Node/Edge Attribute Blocks (#37)
+- **File(s):** `src/parser/parser.ts`
+- **Description:** When a node or edge statement has multiple consecutive attribute blocks (e.g., `work [type=tool] [tool_command="echo hello"]`), only the first block is parsed. The second (and any subsequent) blocks are silently discarded. The DOT format explicitly supports multiple attribute blocks on a single statement — they should be merged together. The root cause is in `parseIdentifierStatement()`: after parsing the first `LBRACKET...RBRACKET` block, `consumeOptionalSemicolon()` is called and the function returns. The parser then returns to `parseStatements()` where the next `[` (LBRACKET) token is not matched by any of the `if` branches and falls through to `// Skip unknown tokens → this.advance()`, which silently consumes just the `[`. The interior key-value pairs of the second block are then parsed as top-level graph attributes (the `IDENTIFIER = value` branch in `parseIdentifierStatement()`), and the closing `]` is also silently skipped.
+- **Expected:** Multiple attribute blocks on the same node/edge statement should be merged: `work [type=tool] [tool_command="echo hello"]` should produce a node with both `type=tool` and `tool_command="echo hello"`. This is standard DOT format behavior — the DOT grammar defines `attr_list: '[' a_list ']' attr_list?` as recursive, explicitly allowing chained blocks.
+- **Actual:** Only the first block is applied. `work [type=tool] [tool_command="echo hello"]` produces a node with `type=tool` but `tool_command` is absent. When this node executes, ToolHandler reports `"No tool_command specified"` and the node fails with `status: "fail"`. No parse error or warning is emitted — the behavior is completely silent.
+- **Reproduction:**
+  ```dot
+  digraph g {
+    start [shape=Mdiamond]
+    work [type=tool] [tool_command="echo two_block_test"]
+    end [shape=Msquare]
+    start -> work
+    work -> end
+  }
+  ```
+  Run: `attractor run test.dot --logs ./logs`. The `work` node fails with `"No tool_command specified"` despite the second attribute block providing it.
+
+  Same issue affects edge statements:
+  ```dot
+  work -> target [condition="outcome=fail"] [label="failure route"]
+  ```
+  The edge gets the `condition` from the first block but silently loses the `label` from the second block.
+- **Fix:** In `parseIdentifierStatement()`, change the single `this.check("LBRACKET") ? this.parseAttrBlock() : new Map<string, string>()` call to a loop that merges all consecutive attribute blocks: `const attrs = new Map(); while (this.check("LBRACKET")) { for (const [k,v] of this.parseAttrBlock()) attrs.set(k, v); }`. This applies to both the node declaration path (line 361) and the edge chain path (line 337). Optionally apply the same fix to `graph [...]`, `node [...]`, and `edge [...]` default block statements in `parseStatement()` for consistency (though multiple separate `node [...]` statements already work correctly).
+
+---
+
 ## BUG-016: Quoted node IDs silently discarded — produces empty graph with misleading validation errors
 
 - **Status:** FIXED
