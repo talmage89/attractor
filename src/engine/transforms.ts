@@ -20,7 +20,12 @@ export function applyTransforms(graph: Graph): void {
   // 2. Stylesheet application
   const stylesheet = graph.attributes.modelStylesheet;
   if (stylesheet) {
-    const rules = parseStylesheet(stylesheet);
-    applyStylesheet(graph, rules);
+    try {
+      const rules = parseStylesheet(stylesheet);
+      applyStylesheet(graph, rules);
+    } catch {
+      // Invalid stylesheet syntax — silently skip application here.
+      // The validator's stylesheetSyntaxRule will report the error as a proper diagnostic.
+    }
   }
 }

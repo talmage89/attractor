@@ -87,4 +87,20 @@ describe("transforms", () => {
     applyTransforms(graph);
     expect(graph.nodes.get("t")?.raw.get("tool_command")).toBe("npm test");
   });
+
+  it("silently skips invalid stylesheet without throwing (validator reports the error)", () => {
+    const graph = parse(`
+      digraph G {
+        graph [model_stylesheet="* llm_model: bad }"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a -> e
+      }
+    `);
+    // Must not throw — the validator's stylesheetSyntaxRule reports this as a diagnostic
+    expect(() => applyTransforms(graph)).not.toThrow();
+    // No stylesheet was applied, so llmModel stays as whatever the default is
+    expect(graph.nodes.get("a")?.llmModel).not.toBe("bad");
+  });
 });
