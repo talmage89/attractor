@@ -319,6 +319,26 @@ describe("executeWithRetry", () => {
     expect(result.notes).toBe("ok-ish");
   });
 
+  it("clamps initialAttempt when it exceeds maxAttempts (BUG-012: resume with lowered retry policy)", async () => {
+    let calls = 0;
+    const handler: Handler = {
+      async execute(): Promise<Outcome> {
+        calls++;
+        return { status: "success" };
+      },
+    };
+    // maxAttempts=2 but initialAttempt=5 simulates a resumed checkpoint where
+    // the stored nodeRetries (4) exceeds the current policy (maxAttempts=2).
+    // Without the clamp, the loop never runs and the node silently fails.
+    const policy = makePolicy({ maxAttempts: 2, jitter: false, initialDelayMs: 0 });
+    const result = await executeWithRetry(
+      handler, makeNode(), new Context(), makeGraph(), NOOP_CONFIG, policy,
+      5 // initialAttempt exceeds maxAttempts
+    );
+    expect(result.status).toBe("success");
+    expect(calls).toBe(1); // handler must run at least once
+  });
+
   it("passes through skipped outcome without retrying", async () => {
     const handler = makeHandler([{ status: "skipped" }]);
     const policy = makePolicy({ maxAttempts: 3 });

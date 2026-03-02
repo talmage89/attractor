@@ -47,7 +47,10 @@ export async function executeWithRetry(
   policy: RetryPolicy,
   initialAttempt = 1
 ): Promise<Outcome> {
-  for (let attempt = initialAttempt; attempt <= policy.maxAttempts; attempt++) {
+  // Clamp initialAttempt so the handler always runs at least once, even if a
+  // resumed checkpoint's stored retry count exceeds the current policy (BUG-012).
+  const startAttempt = Math.min(initialAttempt, policy.maxAttempts);
+  for (let attempt = startAttempt; attempt <= policy.maxAttempts; attempt++) {
     let outcome: Outcome;
     try {
       outcome = await handler.execute(node, context, graph, config);

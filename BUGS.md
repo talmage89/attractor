@@ -1,6 +1,6 @@
 ## BUG-012: Resume fails silently when stored `nodeRetries` exceeds current `maxAttempts`
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / Corrupt Checkpoint Files (#29)
 - **File(s):** `src/engine/retry.ts`, `src/engine/runner.ts`
 - **Description:** When resuming from a checkpoint, `runner.ts` computes `initialAttempt = (nodeRetries.get(currentNode.id) ?? 0) + 1`. This value is passed to `executeWithRetry`, which uses it as the starting index in `for (let attempt = initialAttempt; attempt <= policy.maxAttempts; attempt++)`. If `initialAttempt > policy.maxAttempts` (because the stored retry count in the checkpoint exceeds the current graph's retry policy), the loop never executes. The function falls through to `return { status: "fail", failureReason: "max retries exceeded" }` without ever calling the handler. The node "fails" silently without executing its command.
@@ -8,6 +8,7 @@
 - **Actual:** The node never executes. It immediately returns `{status: "fail", failureReason: "max retries exceeded"}` without running the handler (e.g., without executing `tool_command`).
 - **Reproduction:** (1) Create `test-low-retry.dot` with `default_max_retry="2"`. (2) Craft a checkpoint with `currentNode="step1"` and `nodeRetries={"step1": 3}` (simulating a prior run where the node retried 3 times under a higher policy). (3) Resume: `attractor run test-low-retry.dot --resume checkpoint.json`. Observe step1 shows `fail (0.0s)` even though its `tool_command="echo step1_done"` would succeed.
 - **Natural reproduction:** Run a pipeline with `default_max_retry=5`, let a node retry 4 times mid-run (checkpoint has `nodeRetries[node]=4`), lower the graph to `default_max_retry=3`, then resume — the node never runs and always fails.
+- **Fix:** Added `Math.min(initialAttempt, policy.maxAttempts)` clamp in `executeWithRetry` so the handler always runs at least once, even when the resumed checkpoint's stored retry count exceeds the current policy's `maxAttempts`. Added regression test. 368 tests passing.
 
 ---
 
