@@ -1,3 +1,16 @@
+## BUG-011: `wait.human` user selection overridden by conditional edge on same gate node
+
+- **Status:** OPEN
+- **Found during:** Testing / Wait-Human Deep Dive (#26)
+- **File(s):** `src/engine/runner.ts`, `src/engine/edge-selection.ts`
+- **Description:** `WaitForHumanHandler` communicates the user's selected choice via `suggestedNextIds: [selected.to]` in its outcome. However, `selectEdge` evaluates conditions (Step 1) before consulting `suggestedNextIds` (Step 3). If any outgoing edge from the `wait.human` gate has a `condition=` attribute that evaluates to true (e.g., `condition="outcome=success"`), that edge is selected instead of the one the user chose. The user's explicit selection is silently discarded.
+- **Expected:** The user's selection via `wait.human` should always be followed. `suggestedNextIds` from a handler represents an explicit routing decision and should take precedence over condition matching. At minimum, the runner should follow the direct edge to the `suggestedNextIds` target without passing through `selectEdge` condition matching.
+- **Actual:** With `gate -> path_b` (first edge, auto-approve picks B) and `gate -> path_a [condition="outcome=success"]` (second edge), the pipeline routes to `path_a` despite the user selecting B. The `[edge_selected]` event shows `path_a` was taken.
+- **Reproduction:** Create a `wait.human` node with two edges: first edge goes to `path_b` (no condition), second to `path_a` with `condition="outcome=success"`. Run with `--auto-approve` (auto-approve picks first option = B). Observe that `path_a` is taken instead of `path_b`.
+- **Fix:** In `runner.ts`, extend the `suggestedNextIds` check to also handle the case where `hasDirectEdge` is true. When `outcome.suggestedNextIds[0]` is set and a direct edge to that node exists, follow that direct edge immediately (emitting `edge_selected`) without calling `selectEdge`. This makes `suggestedNextIds` authoritative for both jump (no direct edge) and direct-edge cases.
+
+---
+
 ## BUG-010: `goalGateRetries` counter not persisted in checkpoint — retry budget resets on resume
 
 - **Status:** FIXED
