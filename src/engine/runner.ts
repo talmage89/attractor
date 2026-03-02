@@ -142,6 +142,12 @@ export async function run(config: RunConfig): Promise<RunResult> {
   // as a fallback thread ID (spec Section 11.3 step 4).
   let currentPreviousNodeId: string | undefined = undefined;
 
+  // Counter for goal-gate-driven loop restarts. Capped at defaultMaxRetry to
+  // prevent infinite loops when the retry subgraph never satisfies the gate.
+  // Declared before the resume block so it can be restored from checkpoint.
+  let goalGateRetries = 0;
+  const maxGoalGateRetries = graph.attributes.defaultMaxRetry;
+
   if (config.resumeFromCheckpoint) {
     const checkpoint = await loadCheckpoint(config.resumeFromCheckpoint);
     // Check whether the resume node exists BEFORE restoring any checkpoint state.
@@ -172,6 +178,9 @@ export async function run(config: RunConfig): Promise<RunResult> {
       for (const [k, v] of Object.entries(checkpoint.nodeRetries)) {
         nodeRetries.set(k, v as number);
       }
+      // Restore goal-gate retry counter so the total budget is preserved across
+      // sessions (BUG-010). Missing field in old checkpoints defaults to 0.
+      goalGateRetries = checkpoint.goalGateRetries ?? 0;
       currentNode = resumeNode;
       isFirstNodeAfterResume = true;
     } else {
@@ -199,11 +208,6 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
   let finalStatus: "success" | "fail" = "success";
 
-  // Counter for goal-gate-driven loop restarts. Capped at defaultMaxRetry to
-  // prevent infinite loops when the retry subgraph never satisfies the gate.
-  let goalGateRetries = 0;
-  const maxGoalGateRetries = graph.attributes.defaultMaxRetry;
-
   // Wraps config.onEvent to intercept stage_retrying events, update per-node
   // retry counts, and save a mid-retry checkpoint so that a resumed pipeline
   // can start from the right attempt number rather than restarting at 1.
@@ -221,6 +225,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
           nodeRetries: Object.fromEntries(nodeRetries),
           contextValues: context.snapshot(),
           sessionMap: sessionManager.snapshot(),
+          goalGateRetries,
         },
         config.logsRoot
       ).catch(() => {});
@@ -415,6 +420,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
             nodeRetries: Object.fromEntries(nodeRetries),
             contextValues: context.snapshot(),
             sessionMap: sessionManager.snapshot(),
+            goalGateRetries,
           },
           config.logsRoot
         );
@@ -469,6 +475,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
         nodeRetries: Object.fromEntries(nodeRetries),
         contextValues: context.snapshot(),
         sessionMap: sessionManager.snapshot(),
+        goalGateRetries,
       },
       config.logsRoot
     );
@@ -495,6 +502,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       nodeRetries: Object.fromEntries(nodeRetries),
       contextValues: context.snapshot(),
       sessionMap: sessionManager.snapshot(),
+      goalGateRetries,
     },
     config.logsRoot
   );

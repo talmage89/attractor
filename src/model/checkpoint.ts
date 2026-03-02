@@ -13,6 +13,10 @@ export interface Checkpoint {
   nodeRetries: Record<string, number>;
   contextValues: Record<string, unknown>;
   sessionMap: Record<string, string>;
+  // Number of goal-gate-driven loop restarts consumed so far. Optional for
+  // backward compatibility with checkpoints written before this field existed;
+  // missing value is treated as 0 when restoring.
+  goalGateRetries?: number;
 }
 
 export async function saveCheckpoint(

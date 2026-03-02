@@ -1100,4 +1100,64 @@ describe("execution engine", () => {
     // new_node appears exactly once (no duplicate)
     expect(result.completedNodes.filter(n => n === "new_node")).toHaveLength(1);
   });
+
+  it("BUG-010: goalGateRetries is persisted and restored on resume — budget not reset", async () => {
+    // Reproduces BUG-010: goalGateRetries was initialized to 0 on every run()
+    // call, so resuming a run that had already consumed its retry budget allowed
+    // further goal-gate retries beyond default_max_retry.
+    //
+    // Setup: default_max_retry=1 means the gate may retry at most once (2 total
+    // node executions). Simulate a checkpoint where goalGateRetries=1 (the one
+    // allowed retry was already used). On resume the gate must fail immediately
+    // without allowing another execution.
+    const graph = parse(`
+      digraph G {
+        graph [goal="BUG-010 regression", default_max_retry=1, retry_target="work"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, goal_gate=true]
+        s -> work -> e
+      }
+    `);
+
+    const logsRoot = path.join(tmpDir, "logs");
+    await fs.mkdir(logsRoot, { recursive: true });
+
+    // Simulate a checkpoint saved mid-retry (goalGateRetries=1 means the single
+    // allowed retry was already consumed in the previous session).
+    await saveCheckpoint({
+      timestamp: Date.now(),
+      currentNode: "work",
+      completedNodes: [],
+      nodeOutcomes: {},
+      nodeRetries: {},
+      contextValues: { "graph.goal": "BUG-010 regression" },
+      sessionMap: {},
+      goalGateRetries: 1,
+    }, logsRoot);
+
+    let callCount = 0;
+    const alwaysFailHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        callCount++;
+        return { status: "fail" };
+      },
+    };
+    const registry = new HandlerRegistry(alwaysFailHandler);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot,
+      interviewer: noopInterviewer,
+      resumeFromCheckpoint: path.join(logsRoot, "checkpoint.json"),
+      registry,
+    });
+
+    // Pipeline must terminate with fail (no goal gate satisfied)
+    expect(result.status).toBe("fail");
+    // work should execute exactly once — the restored goalGateRetries=1 equals
+    // maxGoalGateRetries=1, so the gate fails immediately without retrying.
+    expect(callCount).toBe(1);
+  });
 });
