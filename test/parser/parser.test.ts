@@ -262,4 +262,28 @@ describe("parser", () => {
       expect(graph.nodes.get("b")?.timeout).toBeNull();
     });
   });
+
+  describe("quoted node IDs (BUG-016)", () => {
+    it("parses all-quoted node IDs correctly", () => {
+      const graph = parse(fixtures.WITH_QUOTED_NODE_IDS);
+      expect(graph.nodes.size).toBe(3);
+      expect(graph.nodes.get("start")?.shape).toBe("Mdiamond");
+      expect(graph.nodes.get("work")?.type).toBe("tool");
+      expect(graph.nodes.get("end")?.shape).toBe("Msquare");
+      expect(graph.edges).toHaveLength(2);
+      expect(graph.edges[0]).toMatchObject({ from: "start", to: "work" });
+      expect(graph.edges[1]).toMatchObject({ from: "work", to: "end" });
+    });
+
+    it("parses mixed quoted and unquoted node IDs", () => {
+      const graph = parse(fixtures.WITH_MIXED_QUOTED_NODE_IDS);
+      expect(graph.nodes.size).toBe(3);
+      expect(graph.nodes.get("start")?.shape).toBe("Mdiamond");
+      expect(graph.nodes.get("work")?.type).toBe("tool");
+      expect(graph.nodes.get("end")?.shape).toBe("Msquare");
+      expect(graph.edges).toHaveLength(2);
+      expect(graph.edges[0]).toMatchObject({ from: "start", to: "work" });
+      expect(graph.edges[1]).toMatchObject({ from: "work", to: "end" });
+    });
+  });
 });

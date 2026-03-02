@@ -158,6 +158,27 @@ digraph Weights {
 }
 `;
 
+// BUG-016: quoted strings as node IDs (all-quoted)
+export const WITH_QUOTED_NODE_IDS = `
+digraph g {
+  "start" [shape=Mdiamond]
+  "work" [type=tool]
+  "end" [shape=Msquare]
+  "start" -> "work"
+  "work" -> "end"
+}
+`;
+
+// BUG-016: quoted strings as node IDs (mixed quoted and unquoted)
+export const WITH_MIXED_QUOTED_NODE_IDS = `
+digraph g {
+  start [shape=Mdiamond]
+  "work" [type=tool]
+  end [shape=Msquare]
+  start -> "work" -> end
+}
+`;
+
 // --- Invalid DOT for error testing ---
 
 export const INVALID_UNDIRECTED = `

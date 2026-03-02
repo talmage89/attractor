@@ -214,9 +214,9 @@ class Parser {
       return;
     }
 
-    if (t.kind === "IDENTIFIER") {
+    if (t.kind === "IDENTIFIER" || t.kind === "STRING") {
       // Could be: node stmt, edge chain, or top-level key=value graph attr
-      // Look ahead to determine which
+      // Look ahead to determine which. STRING is a quoted node ID (BUG-016).
       this.parseIdentifierStatement();
       return;
     }
@@ -304,19 +304,32 @@ class Parser {
     for (const c of savedClass) this.subgraphClassStack.push(c);
   }
 
+  // Accept either a bare IDENTIFIER or a quoted STRING as a node ID.
+  private parseNodeId(): string {
+    const t = this.peek();
+    if (t.kind === "IDENTIFIER" || t.kind === "STRING") {
+      this.advance();
+      return t.value;
+    }
+    throw new Error(
+      `Parse error: expected identifier at line ${t.line}, column ${t.column}`
+    );
+  }
+
   private parseIdentifierStatement(): void {
-    // Gather identifier chain separated by ARROWs
-    const chain: string[] = [this.match("IDENTIFIER").value];
+    // Gather identifier chain separated by ARROWs.
+    // Both bare identifiers and quoted strings are accepted as node IDs.
+    const chain: string[] = [this.parseNodeId()];
 
     while (this.check("ARROW")) {
       this.advance(); // consume ->
-      // Next must be IDENTIFIER
-      if (!this.check("IDENTIFIER")) {
+      // Next must be IDENTIFIER or STRING (quoted node ID)
+      if (!this.check("IDENTIFIER") && !this.check("STRING")) {
         throw new Error(
           `Parse error: expected identifier after '->' at line ${this.peek().line}`
         );
       }
-      chain.push(this.advance().value);
+      chain.push(this.parseNodeId());
     }
 
     if (chain.length > 1) {

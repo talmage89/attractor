@@ -1,6 +1,6 @@
 ## BUG-016: Quoted node IDs silently discarded — produces empty graph with misleading validation errors
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / Malformed DOT Files (#36)
 - **File(s):** `src/parser/parser.ts`
 - **Description:** When a DOT file uses quoted strings as node IDs (e.g., `"start" [shape=Mdiamond]`), the parser silently discards these declarations without any error or warning. This is because `parseStatement()` handles `IDENTIFIER` tokens as node/edge starts, but when it sees a `STRING` token (a quoted identifier) it falls through to the `// Skip unknown tokens; this.advance()` catch-all, consuming just the token and moving on. As a result, the entire quoted-ID node declaration is silently dropped.
@@ -20,7 +20,7 @@
   ```
   Run: `attractor validate test.dot`. Outputs `[error] (start_node) Graph has no start node` despite `"start"` being declared with `shape=Mdiamond`. No parse error — the entire graph body was silently dropped.
 - **Root cause:** `parseStatement()` in `parser.ts` only handles `IDENTIFIER` tokens as node/edge statement starts. When the first token of a statement is `STRING` (a quoted identifier like `"start"`), the default `this.advance()` branch silently skips it. The subsequent `[shape=Mdiamond]` attribute block, `->` edge tokens, etc. are also silently consumed one token at a time by repeated calls to `this.advance()`, so no error is ever thrown.
-- **Fix:** In `parseStatement()`, add a `STRING` branch alongside `IDENTIFIER` to call `parseIdentifierStatement()`. This would require also updating `parseIdentifierStatement()` to accept STRING tokens as edge targets (after `->`). This makes the parser accept quoted node IDs as valid identifiers — consistent with the full DOT spec. Alternatively, detect `STRING` at the start of a statement and throw a clear parse error.
+- **Fix:** Added `parseNodeId()` helper in `parser.ts` that accepts either `IDENTIFIER` or `STRING` tokens. Updated `parseStatement()` to dispatch `STRING`-headed statements to `parseIdentifierStatement()` (same as `IDENTIFIER`). Updated `parseIdentifierStatement()` to use `parseNodeId()` for the initial token and after each `->`, also accepting `STRING` tokens as edge targets. Added fixtures `WITH_QUOTED_NODE_IDS` and `WITH_MIXED_QUOTED_NODE_IDS` and 2 regression tests. 374 tests passing.
 
 ---
 
