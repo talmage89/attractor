@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { run } from "../../src/engine/runner.js";
+import { run, MAX_LOOP_RESTART_DEPTH } from "../../src/engine/runner.js";
 import { parse } from "../../src/parser/parser.js";
 import type { PipelineEvent } from "../../src/model/events.js";
 import { HandlerRegistry } from "../../src/handlers/registry.js";
@@ -434,6 +434,81 @@ describe("execution engine", () => {
     expect(callCount).toBe(2);
     // totalCostUsd must be the sum of both run cycles
     expect(result.totalCostUsd).toBeCloseTo(costPerCall * 2);
+  });
+
+  it("fails with warning when loop_restart exceeds maximum depth (BUG-014)", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test loop restart depth limit"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a
+        a -> a [loop_restart=true]
+        a -> e [condition="outcome=fail"]
+      }
+    `);
+
+    const events: PipelineEvent[] = [];
+    const registry = new HandlerRegistry({ async execute(): Promise<Outcome> { return { status: "success" }; } });
+
+    // Simulate being at the depth limit already — the very next restart should fail immediately
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs-depth"),
+      interviewer: noopInterviewer,
+      registry,
+      loopRestartDepth: MAX_LOOP_RESTART_DEPTH,
+      onEvent: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe("fail");
+    const warning = events.find((e) => e.kind === "warning" && e.message.includes("loop_restart exceeded maximum depth"));
+    expect(warning).toBeDefined();
+  });
+
+  it("uses counter-based flat logsRoot naming for loop restarts (BUG-014)", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test loop restart naming"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a
+        a -> a [loop_restart=true, condition="outcome=success"]
+        a -> e [condition="outcome=fail"]
+      }
+    `);
+
+    let callCount = 0;
+    const capturedLogsRoots: string[] = [];
+    const registry = new HandlerRegistry({
+      async execute(): Promise<Outcome> {
+        callCount++;
+        return callCount === 1 ? { status: "success" } : { status: "fail" };
+      },
+    });
+
+    const baseLogsRoot = path.join(tmpDir, "logs-naming");
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: baseLogsRoot,
+      interviewer: noopInterviewer,
+      registry,
+      onEvent: (e) => {
+        if (e.kind === "pipeline_started") {
+          // capture directory existence indirectly via logsRoot
+        }
+      },
+    });
+
+    // Verify restart directory uses flat counter scheme: <base>-restart-1
+    // (not <base>-restart-<ts>-restart-<ts> chaining)
+    const restartDir = `${baseLogsRoot}-restart-1`;
+    const exists = await fs.access(restartDir).then(() => true).catch(() => false);
+    expect(exists).toBe(true);
   });
 
   it("handles pipeline with no work nodes (start -> exit)", async () => {

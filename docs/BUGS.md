@@ -1,6 +1,6 @@
 ## BUG-014: Unconditional `loop_restart=true` edge causes infinite restart loop, eventually crashing with ENAMETOOLONG
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / Loop Restart Edge Feature (#33)
 - **File(s):** `src/engine/runner.ts`
 - **Description:** When an edge has `loop_restart=true` and its condition always matches (or has no condition), the `run()` function restarts in an infinite recursion. Each restart creates a new sibling logsRoot by appending `-restart-<timestamp>` to the current `config.logsRoot`. After ~12 restarts, the path string exceeds the OS file-name length limit (typically 255 bytes on Linux ext4 for a single path component, or 4096 bytes for the full path). The `fs.mkdir(logsRoot, { recursive: true })` call throws `ENAMETOOLONG`, which propagates as an unhandled exception to `main()` and prints `Error: ENAMETOOLONG: name too long, mkdir '<path>'` with exit code 3. The error message gives no indication that the root cause is an infinite loop_restart chain.
@@ -19,6 +19,7 @@
   Run: `attractor run infinite.dot --logs ./logs/test`. After ~12 restarts, crashes with ENAMETOOLONG.
   Also reproduced via `wait.human` + `--auto-approve` when the auto-approved option's edge has `loop_restart=true`.
 - **Note:** In practice, users should always use a condition on loop_restart edges (e.g., `condition="context.some_key=retry"`) to prevent infinite loops. The bug is a missing safeguard — there's no spec-specified maximum restart depth, and the implementation adds none.
+- **Fix:** Added `MAX_LOOP_RESTART_DEPTH = 100` constant and `loopRestartDepth`/`loopRestartBase` fields to `RunConfig`. Both loop-restart spots in `runner.ts` (suggestedNextIds path and selectEdge path) now check the depth before recursing; if `depth >= 100`, a `warning` event is emitted (`"loop_restart exceeded maximum depth of 100"`) and the run terminates with `fail`. The logsRoot naming was also changed from timestamp-chaining (`<base>-restart-<ts>-restart-<ts2>`) to counter-based flat scheme (`<base>-restart-N`) using `loopRestartBase` to track the original path — keeping the directory name length constant regardless of restart count. Added 2 regression tests. 371 tests passing.
 
 ---
 

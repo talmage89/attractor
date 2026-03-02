@@ -19,6 +19,9 @@ import { buildRetryPolicy, executeWithRetry } from "./retry.js";
 import { checkGoalGates, resolveRetryTarget } from "./goal-gates.js";
 import { resolveFidelity, resolveThreadId } from "../model/fidelity.js";
 
+/** Maximum number of loop_restart recursions before failing with a clear error. */
+export const MAX_LOOP_RESTART_DEPTH = 100;
+
 export interface RunConfig {
   graph: Graph;
   cwd: string;
@@ -51,6 +54,19 @@ export interface RunConfig {
    * allowing sequential LLM nodes to share a conversation thread by default.
    */
   previousNodeId?: string;
+  /**
+   * Number of loop_restart recursions already performed. Incremented on each
+   * restart and checked against MAX_LOOP_RESTART_DEPTH to prevent infinite loops
+   * (BUG-014). Internal use only — callers should not set this.
+   */
+  loopRestartDepth?: number;
+  /**
+   * The original logsRoot from the first run in a loop_restart chain. Used to
+   * generate counter-based flat sibling directories (`<base>-restart-1`,
+   * `<base>-restart-2`, …) so path length stays constant regardless of restart
+   * depth (BUG-014). Internal use only — callers should not set this.
+   */
+  loopRestartBase?: string;
 }
 
 export interface RunResult {
@@ -443,8 +459,19 @@ export async function run(config: RunConfig): Promise<RunResult> {
           // that the handler's explicit routing decision is not overridden by a
           // condition match on another outgoing edge (BUG-011).
           if (directEdge.loopRestart) {
-            const restartLogsRoot = `${config.logsRoot}-restart-${Date.now()}`;
-            const restartResult = await run({ ...config, logsRoot: restartLogsRoot, resumeFromCheckpoint: undefined });
+            const depth = config.loopRestartDepth ?? 0;
+            if (depth >= MAX_LOOP_RESTART_DEPTH) {
+              emit(config, {
+                kind: "warning",
+                message: `loop_restart exceeded maximum depth of ${MAX_LOOP_RESTART_DEPTH}`,
+                timestamp: Date.now(),
+              });
+              finalStatus = "fail";
+              break loop;
+            }
+            const base = config.loopRestartBase ?? config.logsRoot;
+            const restartLogsRoot = `${base}-restart-${depth + 1}`;
+            const restartResult = await run({ ...config, logsRoot: restartLogsRoot, loopRestartBase: base, loopRestartDepth: depth + 1, resumeFromCheckpoint: undefined });
             return { ...restartResult, totalCostUsd: totalCostUsd + restartResult.totalCostUsd };
           }
           emit(config, {
@@ -494,9 +521,21 @@ export async function run(config: RunConfig): Promise<RunResult> {
     // g. LOOP RESTART CHECK
     if (edge.loopRestart) {
       // Per spec Section 8.2 step g: restart the run with a fresh logsRoot.
-      // A new sibling directory is used so logs from each cycle are preserved.
-      const restartLogsRoot = `${config.logsRoot}-restart-${Date.now()}`;
-      const restartResult = await run({ ...config, logsRoot: restartLogsRoot, resumeFromCheckpoint: undefined });
+      // Uses counter-based flat sibling directories (<base>-restart-N) so path
+      // length stays constant regardless of restart depth (BUG-014).
+      const depth = config.loopRestartDepth ?? 0;
+      if (depth >= MAX_LOOP_RESTART_DEPTH) {
+        emit(config, {
+          kind: "warning",
+          message: `loop_restart exceeded maximum depth of ${MAX_LOOP_RESTART_DEPTH}`,
+          timestamp: Date.now(),
+        });
+        finalStatus = "fail";
+        break loop;
+      }
+      const base = config.loopRestartBase ?? config.logsRoot;
+      const restartLogsRoot = `${base}-restart-${depth + 1}`;
+      const restartResult = await run({ ...config, logsRoot: restartLogsRoot, loopRestartBase: base, loopRestartDepth: depth + 1, resumeFromCheckpoint: undefined });
       return { ...restartResult, totalCostUsd: totalCostUsd + restartResult.totalCostUsd };
     }
 
