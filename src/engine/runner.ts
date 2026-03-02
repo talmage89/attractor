@@ -163,6 +163,16 @@ export async function run(config: RunConfig): Promise<RunResult> {
     const resumeNode = graph.nodes.get(checkpoint.currentNode);
     if (resumeNode) {
       currentNode = resumeNode;
+    } else {
+      // The checkpoint references a node that no longer exists in the graph
+      // (e.g. the .dot file was modified after the checkpoint was saved).
+      // Emit a warning so the user knows the resume didn't land where expected.
+      emit(config, {
+        kind: "warning",
+        message: `Checkpoint node '${checkpoint.currentNode}' not found in graph — resuming from start`,
+        timestamp: Date.now(),
+      });
+      // currentNode remains startNode (already initialized above)
     }
     isFirstNodeAfterResume = true;
   }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { formatEvent, cmdRun, cmdValidate } from "../../src/cli.js";
+import { formatEvent, cmdRun, cmdValidate, cmdVisualize } from "../../src/cli.js";
 import type { PipelineEvent } from "../../src/model/events.js";
 
 // Helper: thrown instead of calling process.exit() during tests
@@ -427,5 +427,54 @@ describe("cmdRun", () => {
     expect(exitCode).not.toBe(2);
     // Should succeed
     expect(exitCode).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cmdVisualize tests
+// ---------------------------------------------------------------------------
+
+describe("cmdVisualize", () => {
+  let tmpDir: string;
+  let stderrOutput: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "attractor-cli-visualize-"));
+    stderrOutput = "";
+    vi.spyOn(process, "exit").mockImplementation((code?: number): never => {
+      throw new ExitError(code ?? 0);
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation((data: unknown) => {
+      stderrOutput += String(data);
+      return true;
+    });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("exits 3 when dotfile argument is missing", async () => {
+    let exitCode: number | undefined;
+    try {
+      await cmdVisualize([]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    expect(exitCode).toBe(3);
+    expect(stderrOutput).toContain("Usage:");
+  });
+
+  it("exits 3 when dotfile cannot be read", async () => {
+    const missing = path.join(tmpDir, "does-not-exist.dot");
+    let exitCode: number | undefined;
+    try {
+      await cmdVisualize([missing]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    expect(exitCode).toBe(3);
+    expect(stderrOutput).toContain("Error:");
   });
 });

@@ -901,4 +901,50 @@ describe("execution engine", () => {
     // The completed node ids (s, a, b) should NOT appear as checkpoint nodeIds
     expect(nodeIds).not.toContain("s");
   });
+
+  it("emits a warning when checkpoint currentNode is not found in graph", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test missing checkpoint node"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a -> e
+      }
+    `);
+
+    const logsRoot = path.join(tmpDir, "logs");
+    await fs.mkdir(logsRoot, { recursive: true });
+
+    // Save a checkpoint that references a node ("deleted_node") that doesn't
+    // exist in the current graph — simulating a graph edit after checkpoint.
+    await saveCheckpoint({
+      timestamp: Date.now(),
+      currentNode: "deleted_node",
+      completedNodes: [],
+      nodeOutcomes: {},
+      nodeRetries: {},
+      contextValues: { "graph.goal": "Test missing checkpoint node" },
+      sessionMap: {},
+    }, logsRoot);
+
+    const events: PipelineEvent[] = [];
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot,
+      interviewer: noopInterviewer,
+      onEvent: (e) => events.push(e),
+      resumeFromCheckpoint: path.join(logsRoot, "checkpoint.json"),
+    });
+
+    // Pipeline should still complete successfully (fell back to start)
+    expect(result.status).toBe("success");
+
+    // A warning event must have been emitted describing the missing node
+    const warnings = events.filter(e => e.kind === "warning") as Array<{ kind: "warning"; message: string }>;
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0].message).toContain("deleted_node");
+    expect(warnings[0].message).toContain("not found");
+  });
 });

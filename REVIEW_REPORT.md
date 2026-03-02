@@ -49,7 +49,7 @@ This is the seventeenth code review pass of the Attractor TypeScript DAG pipelin
 
 - **Severity:** LOW
 - **Category:** Test Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/cli.ts`, `test/cli/cli.test.ts`
 - **Description:** Review cycle 16 added tests for `cmdRun` and `cmdValidate` after exporting all three CLI command functions. However, `cmdVisualize` was exported but received no tests. It is the only exported CLI command without coverage:
 
@@ -76,7 +76,7 @@ This is the seventeenth code review pass of the Attractor TypeScript DAG pipelin
 
 - **Severity:** LOW
 - **Category:** Correctness / Robustness
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/engine/runner.ts:163-167`
 - **Description:** When resuming from a checkpoint, the runner looks up the node to resume from in the current graph:
 
