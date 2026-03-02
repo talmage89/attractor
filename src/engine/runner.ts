@@ -144,44 +144,49 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
   if (config.resumeFromCheckpoint) {
     const checkpoint = await loadCheckpoint(config.resumeFromCheckpoint);
-    completedNodes = checkpoint.completedNodes;
-    // If the resume node is already in completedNodes it means the prior run
-    // ended at a failed node (pushed before edge selection returned null).
-    // Remove it so re-execution on resume doesn't create a duplicate entry.
-    const resumeNodeIdx = completedNodes.lastIndexOf(checkpoint.currentNode);
-    if (resumeNodeIdx !== -1) {
-      completedNodes.splice(resumeNodeIdx, 1);
-    }
-    // Restore nodeOutcomes
-    for (const [k, v] of Object.entries(checkpoint.nodeOutcomes)) {
-      nodeOutcomes.set(k, v as Outcome);
-    }
-    // Restore context
-    for (const [k, v] of Object.entries(checkpoint.contextValues)) {
-      context.set(k, v);
-    }
-    // Restore session map so full-fidelity CC sessions resume correctly
-    sessionManager.restore(checkpoint.sessionMap);
-    // Restore per-node retry counts so the first node executes from the right attempt
-    for (const [k, v] of Object.entries(checkpoint.nodeRetries)) {
-      nodeRetries.set(k, v as number);
-    }
-    // Resume from saved currentNode
+    // Check whether the resume node exists BEFORE restoring any checkpoint state.
+    // If the node no longer exists (e.g. the .dot file was edited after the
+    // checkpoint was saved), we fall back to start with a clean slate so stale
+    // completedNodes/context don't pollute the fresh run (BUG-009).
     const resumeNode = graph.nodes.get(checkpoint.currentNode);
     if (resumeNode) {
+      completedNodes = checkpoint.completedNodes;
+      // If the resume node is already in completedNodes it means the prior run
+      // ended at a failed node (pushed before edge selection returned null).
+      // Remove it so re-execution on resume doesn't create a duplicate entry.
+      const resumeNodeIdx = completedNodes.lastIndexOf(checkpoint.currentNode);
+      if (resumeNodeIdx !== -1) {
+        completedNodes.splice(resumeNodeIdx, 1);
+      }
+      // Restore nodeOutcomes
+      for (const [k, v] of Object.entries(checkpoint.nodeOutcomes)) {
+        nodeOutcomes.set(k, v as Outcome);
+      }
+      // Restore context
+      for (const [k, v] of Object.entries(checkpoint.contextValues)) {
+        context.set(k, v);
+      }
+      // Restore session map so full-fidelity CC sessions resume correctly
+      sessionManager.restore(checkpoint.sessionMap);
+      // Restore per-node retry counts so the first node executes from the right attempt
+      for (const [k, v] of Object.entries(checkpoint.nodeRetries)) {
+        nodeRetries.set(k, v as number);
+      }
       currentNode = resumeNode;
+      isFirstNodeAfterResume = true;
     } else {
       // The checkpoint references a node that no longer exists in the graph
       // (e.g. the .dot file was modified after the checkpoint was saved).
       // Emit a warning so the user knows the resume didn't land where expected.
+      // Do NOT restore any checkpoint state — start fresh from the beginning.
       emit(config, {
         kind: "warning",
         message: `Checkpoint node '${checkpoint.currentNode}' not found in graph — resuming from start`,
         timestamp: Date.now(),
       });
       // currentNode remains startNode (already initialized above)
+      // isFirstNodeAfterResume remains false (no prior session context to continue)
     }
-    isFirstNodeAfterResume = true;
   }
 
   // Emit pipeline_started

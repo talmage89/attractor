@@ -1053,4 +1053,51 @@ describe("execution engine", () => {
     expect(warnings[0].message).toContain("deleted_node");
     expect(warnings[0].message).toContain("not found");
   });
+
+  it("BUG-009: stale completedNodes are NOT restored when checkpoint node is missing from graph", async () => {
+    // Reproduces BUG-009: if the checkpoint's currentNode no longer exists in
+    // the graph but completedNodes references v1 nodes, those stale nodes must
+    // NOT bleed into the fresh run's completedNodes — otherwise nodes that ran
+    // in the prior (v1) graph re-execute and appear twice.
+    const graph = parse(`
+      digraph G {
+        graph [goal="BUG-009 regression"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        new_node [shape=box]
+        s -> new_node -> e
+      }
+    `);
+
+    const logsRoot = path.join(tmpDir, "logs");
+    await fs.mkdir(logsRoot, { recursive: true });
+
+    // Checkpoint from a v1 run: old_node was completed and is the currentNode,
+    // but step1 also appears in completedNodes. The v2 graph has neither node.
+    await saveCheckpoint({
+      timestamp: Date.now(),
+      currentNode: "old_node",        // does not exist in v2 graph
+      completedNodes: ["step1"],      // stale v1 node, must not leak into result
+      nodeOutcomes: { step1: { status: "success" } },
+      nodeRetries: {},
+      contextValues: { "graph.goal": "BUG-009 regression", outcome: "success" },
+      sessionMap: {},
+    }, logsRoot);
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot,
+      interviewer: noopInterviewer,
+      resumeFromCheckpoint: path.join(logsRoot, "checkpoint.json"),
+    });
+
+    expect(result.status).toBe("success");
+    // Stale v1 node must NOT appear in the result
+    expect(result.completedNodes).not.toContain("step1");
+    // The fresh run should have executed new_node
+    expect(result.completedNodes).toContain("new_node");
+    // new_node appears exactly once (no duplicate)
+    expect(result.completedNodes.filter(n => n === "new_node")).toHaveLength(1);
+  });
 });
