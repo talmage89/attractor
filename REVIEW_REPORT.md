@@ -76,7 +76,7 @@ This is the eighteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED — Added `return "" as never` to all three `.catch()` handlers in `cmdRun`, `cmdValidate`, and `cmdVisualize`; removed the `as string` casts. 355 tests passing.
 - **File(s):** `src/cli.ts:246`
 - **Description:** The `source` variable is inferred as `string | void` by TypeScript because the `.catch()` handler returns `void` (via `process.exit(3)`, which TypeScript does not always prove is `never` when mocked in tests):
 

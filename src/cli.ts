@@ -94,9 +94,10 @@ export async function cmdRun(args: string[]): Promise<void> {
   const source = await fs.readFile(dotfile, "utf-8").catch(() => {
     process.stderr.write(`Error: cannot read file: ${dotfile}\n`);
     process.exit(3);
+    return "" as never;
   });
 
-  const graph = parse(source as string);
+  const graph = parse(source);
   applyTransforms(graph);
   const diags = validate(graph);
   const errors = diags.filter((d) => d.severity === "error");
@@ -193,9 +194,10 @@ export async function cmdValidate(args: string[]): Promise<void> {
   const source = await fs.readFile(dotfile, "utf-8").catch(() => {
     process.stderr.write(`Error: cannot read file: ${dotfile}\n`);
     process.exit(3);
+    return "" as never;
   });
 
-  const graph = parse(source as string);
+  const graph = parse(source);
   applyTransforms(graph);
 
   const diags = validate(graph);
@@ -223,6 +225,7 @@ export async function cmdVisualize(args: string[]): Promise<void> {
   const source = await fs.readFile(dotfile, "utf-8").catch(() => {
     process.stderr.write(`Error: cannot read file: ${dotfile}\n`);
     process.exit(3);
+    return "" as never;
   });
 
   const child = spawn("dot", ["-Tsvg"], { stdio: ["pipe", "inherit", "inherit"] });
@@ -243,7 +246,7 @@ export async function cmdVisualize(args: string[]): Promise<void> {
       resolve();
     });
 
-    child.stdin?.write(source as string);
+    child.stdin?.write(source);
     child.stdin?.end();
   });
 
