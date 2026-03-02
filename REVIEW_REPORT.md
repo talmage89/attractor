@@ -1,97 +1,55 @@
 # Code Review Report
 
 **Date:** 2026-03-02
-**Reviewer:** eighteenth-pass
-**Test Status:** All passing (352/352 across 22 test files)
+**Reviewer:** nineteenth-pass
+**Test Status:** All passing (355/355 across 22 test files)
 
 ---
 
 ## Summary
 
-This is the eighteenth code review pass of the Attractor TypeScript DAG pipeline execution engine. All 352 tests pass and the codebase is in excellent shape after 17 prior review cycles. This pass surfaces 2 findings: one LOW and one TRIVIAL. The LOW finding is a validation gap — `retryTargetExistsRule` checks per-node retry targets but omits the graph-level `retry_target` and `fallback_retry_target` graph attributes, allowing a misconfigured graph to pass validation with no warning even though the goal-gate retry mechanism would silently fail. The TRIVIAL finding is a TypeScript cast in `cmdVisualize`. No critical, high, or medium issues were found.
+This is the nineteenth code review pass of the Attractor TypeScript DAG pipeline execution engine. All 355 tests pass. After 18 prior review cycles, the codebase is in excellent shape with no critical, high, medium, or low findings. This pass surfaces 2 TRIVIAL findings: a minor omission in `ConditionalHandler` and a minor regex inconsistency between `parseAcceleratorKey` and `normalizeLabel`. The review cycle is complete.
 
 ---
 
 ## Findings
 
-### FINDING-001: `retryTargetExistsRule` omits graph-level `retry_target` / `fallback_retry_target` from validation
+### FINDING-001: `ConditionalHandler.execute` omits `notes` field present in spec
 
-- **Severity:** LOW
-- **Category:** Spec Compliance / Correctness
-- **Status:** RESOLVED — Extended `retryTargetExistsRule` to check `graph.attributes.retryTarget` and `graph.attributes.fallbackRetryTarget`; added 4 new test cases (3 invalid, 1 valid). 355 tests passing.
-- **File(s):** `src/validation/rules.ts:247-268`, `test/validation/validator.test.ts:637-667`
-- **Description:** The `retryTargetExistsRule` linting rule validates that per-node `retry_target` and `fallback_retry_target` attributes reference existing nodes. However, it does not validate the corresponding graph-level attributes (`graph.attributes.retryTarget`, `graph.attributes.fallbackRetryTarget`), which are equally important since `resolveRetryTarget()` consults them as fallback candidates:
-
-  ```ts
-  // src/engine/goal-gates.ts — resolveRetryTarget consults graph-level attributes
-  const candidates = [
-    failedNode.retryTarget,
-    failedNode.fallbackRetryTarget,
-    graph.attributes.retryTarget,        // ← not validated by retryTargetExistsRule
-    graph.attributes.fallbackRetryTarget, // ← not validated by retryTargetExistsRule
-  ];
-  ```
-
-  If a user writes `graph [retry_target="nonexistent"]` and that node is later removed or misspelled, `retryTargetExistsRule` produces no warning. The `resolveRetryTarget()` call silently returns `null` (because `graph.nodes.has("nonexistent")` is false), and the goal-gate retry mechanism is broken with no indication to the user.
-
-  The current test coverage for `retryTargetExistsRule` only tests per-node attributes — there is no test case for an invalid graph-level `retry_target` attribute.
-
-- **Recommendation:** Extend `retryTargetExistsRule` to also validate graph-level attributes:
+- **Severity:** TRIVIAL
+- **Category:** Spec Compliance
+- **Status:** OPEN
+- **File(s):** `src/handlers/conditional.ts:5-9`
+- **Description:** The spec (Section 9.6) shows `ConditionalHandler` returning an outcome with a `notes` field:
 
   ```ts
-  function retryTargetExistsRule(graph: Graph): Diagnostic[] {
-    const diags: Diagnostic[] = [];
-
-    // Existing: per-node retry targets
-    for (const node of graph.nodes.values()) {
-      if (node.retryTarget && !graph.nodes.has(node.retryTarget)) { ... }
-      if (node.fallbackRetryTarget && !graph.nodes.has(node.fallbackRetryTarget)) { ... }
-    }
-
-    // New: graph-level retry targets
-    if (graph.attributes.retryTarget && !graph.nodes.has(graph.attributes.retryTarget)) {
-      diags.push({
-        rule: "retry_target_exists",
-        severity: "warning",
-        message: `Graph retry_target '${graph.attributes.retryTarget}' does not exist`,
-      });
-    }
-    if (graph.attributes.fallbackRetryTarget && !graph.nodes.has(graph.attributes.fallbackRetryTarget)) {
-      diags.push({
-        rule: "retry_target_exists",
-        severity: "warning",
-        message: `Graph fallback_retry_target '${graph.attributes.fallbackRetryTarget}' does not exist`,
-      });
-    }
-
-    return diags;
-  }
+  return {
+    status: "success",
+    notes: `Conditional node evaluated: ${node.id}`,
+  };
   ```
 
-  Also add test cases to `test/validation/validator.test.ts` covering both graph-level attributes with invalid node references.
+  The implementation returns only `{ status: "success" }` without the `notes` field. The `notes` field is optional in the `Outcome` interface, so this does not affect functionality. Routing is handled by edge selection, not this handler, so the omission has no observable effect on pipeline behaviour.
+
+- **Recommendation:** No action required. If desired for consistency with the spec, add `notes: `Conditional node evaluated: ${node.id}`` to the return value.
 
 ---
 
-### FINDING-002: `cmdVisualize` uses `source as string` cast that bypasses TypeScript's type check
+### FINDING-002: `parseAcceleratorKey` regex differs slightly from spec and from `normalizeLabel`
 
 - **Severity:** TRIVIAL
 - **Category:** Code Quality
-- **Status:** RESOLVED — Added `return "" as never` to all three `.catch()` handlers in `cmdRun`, `cmdValidate`, and `cmdVisualize`; removed the `as string` casts. 355 tests passing.
-- **File(s):** `src/cli.ts:246`
-- **Description:** The `source` variable is inferred as `string | void` by TypeScript because the `.catch()` handler returns `void` (via `process.exit(3)`, which TypeScript does not always prove is `never` when mocked in tests):
+- **Status:** OPEN
+- **File(s):** `src/handlers/wait-human.ts:11-23`, `src/engine/edge-selection.ts:14-23`
+- **Description:** There are two minor inconsistencies between the spec's reference regex for `parseAcceleratorKey` and the implementation:
 
-  ```ts
-  const source = await fs.readFile(dotfile, "utf-8").catch(() => {
-    process.stderr.write(`Error: cannot read file: ${dotfile}\n`);
-    process.exit(3);
-  });
-  // ...
-  child.stdin?.write(source as string); // ← cast hides potential undefined
-  ```
+  1. **Spec uses `\w`, implementation uses `[A-Za-z0-9]`**: The spec's reference implementation uses `\w` (which matches letters, digits, and underscore) while the implementation uses `[A-Za-z0-9]` (no underscore). A label like `[_] Skip` would match the spec's pattern but not the implementation's.
 
-  In practice the cast is safe because `process.exit(3)` terminates the process (or in tests, throws an `ExitError`), so `source` is never `undefined` at the cast site. The parallel code in `cmdRun` (line 99) and `cmdValidate` (line 198) uses the same pattern with the same cast (`parse(source as string)`). This is a stylistic inconsistency relative to idiomatic TypeScript — the pattern could be more explicitly typed using a utility function or by narrowing at the call site.
+  2. **Trailing space requirement**: The spec's `parseAcceleratorKey` patterns include `\s+` after the closing delimiter (e.g., `^\[(\w)\]\s+`), while the implementation does not require a trailing space (e.g., `^\[([A-Za-z0-9])\]`). The implementation is *more permissive* here: it accepts `[Y]Option` (no space), where the spec would fall back to the first-character heuristic.
 
-- **Recommendation:** No action required for correctness. If desired for consistency, the `.catch(() => { ...; process.exit(3); return "" as never; })` pattern would allow TypeScript to infer `string` without a cast. However, given this pattern appears in three places and has been stable across many review cycles, this is genuinely TRIVIAL.
+  3. **Divergence from `normalizeLabel`**: `normalizeLabel` (used in edge selection) DOES require trailing `\s+` (e.g., `/^\[\w\]\s+/`). This means a label `[Y]Option` (no space) would be extracted with key `"Y"` by `parseAcceleratorKey` but would NOT have its prefix stripped by `normalizeLabel`. In practice this is harmless — `WaitForHumanHandler` routes via `suggestedNextIds`, not `preferredLabel`, so `normalizeLabel` is not involved in `wait.human` routing.
+
+- **Recommendation:** No action required for correctness. The functional impact is zero. If desired for consistency, align `parseAcceleratorKey` to use the same regex as `normalizeLabel`: add `\s+` after `]` and `)`.
 
 ---
 
@@ -102,13 +60,13 @@ This is the eighteenth code review pass of the Attractor TypeScript DAG pipeline
 | CRITICAL | 0     |
 | HIGH     | 0     |
 | MEDIUM   | 0     |
-| LOW      | 1     |
-| TRIVIAL  | 1     |
+| LOW      | 0     |
+| TRIVIAL  | 2     |
 | **Total**| **2** |
 
-| Category       | Count |
-|----------------|-------|
-| Spec Compliance | 1    |
-| Code Quality   | 1     |
+| Category        | Count |
+|-----------------|-------|
+| Spec Compliance | 1     |
+| Code Quality    | 1     |
 
-The codebase is in excellent condition after 17 review cycles. The single LOW finding (FINDING-001) is a validation gap that should be addressed: a misspelled or deleted graph-level `retry_target` currently passes validation silently. FINDING-002 is genuinely trivial and requires no action.
+The codebase is in excellent condition after 18 review cycles. Both findings are genuinely TRIVIAL — they have no observable effect on pipeline correctness, performance, or user experience. The review cycle is complete and the codebase is ready for usage testing.
