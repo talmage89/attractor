@@ -1,3 +1,15 @@
+## BUG-009: Resume with missing checkpoint node leaves stale `completedNodes`, causing duplicates
+
+- **Status:** OPEN
+- **Found during:** Testing / Checkpoint and Resume 2nd pass (#22)
+- **File(s):** `src/engine/runner.ts`
+- **Description:** When `--resume` is used with a checkpoint whose `currentNode` no longer exists in the graph (e.g., the `.dot` file was edited after the run), the runner emits a warning and falls back to running from `start`. However, it does NOT reset `completedNodes`, `nodeOutcomes`, `contextValues`, or `nodeRetries` from the checkpoint. When the runner subsequently executes nodes that were in the stale `completedNodes` list, they are appended again, creating duplicate entries. The final "Completed nodes" summary and checkpoint file both contain duplicates (e.g., `step1, step1, new_node` instead of `step1, new_node`).
+- **Expected:** When the checkpoint node is not found in the graph and the runner falls back to `start`, all checkpoint state (completedNodes, nodeOutcomes, contextValues, nodeRetries, sessionMap) should be reset to initial values, since we are effectively starting a fresh run (not resuming). The user is warned via the `⚠` message that resume didn't land where expected.
+- **Actual:** `completedNodes` retains stale entries from the checkpoint. Nodes that ran in the prior (v1 graph) run re-execute and are appended to the stale list, producing duplicates like `['step1', 'step1', 'new_node']` in the final checkpoint.
+- **Reproduction:** (1) Create `v1.dot` with nodes `start → step1 → old_node → end`. (2) Run, kill during `old_node`. (3) Create `v2.dot` with nodes `start → step1 → new_node → end` (rename `old_node` to `new_node`). (4) Resume using v2.dot against the v1 checkpoint. Observe "Completed nodes: step1, step1, new_node".
+
+---
+
 ## BUG-008: `auto_status=true` masks CC infrastructure failures
 
 - **Status:** FIXED
