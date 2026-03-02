@@ -1,3 +1,28 @@
+## BUG-019: Subgraph with empty-derived class appends trailing comma to node's existing `class=` attribute
+
+- **Status:** OPEN
+- **Found during:** Testing / Subgraph Features (#43)
+- **File(s):** `src/parser/parser.ts`
+- **Description:** When a subgraph has a `label` attribute whose derived class name is empty (e.g. `label = "!!!"` where all characters are stripped by `deriveClassName`), the empty string `""` is pushed to `subgraphClassStack`. In the node-creation code, the class appending loop runs for every entry in `subgraphClassStack`. For a node with an existing `class=` attribute (e.g. `class=existing`), the check `["existing"].includes("")` is false, so the code appends the empty string: `node.className = "existing" + "," + "" = "existing,"`. The trailing comma in `className` is incorrect data. For nodes without an existing class, the case `if (!node.className)` fires and assigns `""` to `""`, which is harmless.
+- **Expected:** When `deriveClassName(label)` returns an empty string, no class should be added to nodes inside the subgraph. Either the empty class should not be pushed to `subgraphClassStack`, or the class appending loop should skip empty class names via `if (!cls) continue`.
+- **Actual:** `node.className = "existing,"` (trailing comma) instead of `"existing"`. Stylesheet class selectors still work because the applicator uses `split(",").map(c => c.trim()).includes(selector.className)`, which handles the trailing comma gracefully. However, the className data is incorrect and would fail any strict string-equality check.
+- **Reproduction:**
+  ```dot
+  digraph g {
+    start [shape=Mdiamond]
+    subgraph s {
+      label = "!!!"
+      step1 [type=tool tool_command="echo x" class=existing]
+    }
+    end [shape=Msquare]
+    start -> step1 -> end
+  }
+  ```
+  Parse and inspect: `g.nodes.get('step1').className === "existing,"` (expected `"existing"`).
+- **Fix:** In `deriveClassName` call site in `parseSubgraph()`, check the derived class before pushing: `const derivedClass = deriveClassName(subgraphLabel); if (derivedClass) this.subgraphClassStack.push(derivedClass);`. Alternatively, add `if (!cls) continue;` at the top of the class-appending loop in `buildNode`.
+
+---
+
 ## BUG-018: `default_max_retry` with a non-integer value causes NaN, silently failing all nodes
 
 - **Status:** FIXED
