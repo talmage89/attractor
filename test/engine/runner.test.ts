@@ -1160,4 +1160,67 @@ describe("execution engine", () => {
     // maxGoalGateRetries=1, so the gate fails immediately without retrying.
     expect(callCount).toBe(1);
   });
+
+  it("BUG-011: suggestedNextIds takes priority over conditional edges when direct edge exists", async () => {
+    // BUG-011: WaitForHumanHandler communicates the user's choice via
+    // suggestedNextIds. Previously, if any outgoing edge had a condition that
+    // evaluated true (e.g. condition="outcome=success"), selectEdge's Step 1
+    // would select it BEFORE checking suggestedNextIds in Step 3, silently
+    // discarding the user's selection.
+    //
+    // Fix: when suggestedNextIds[0] has a direct edge from the current node,
+    // follow that edge immediately without calling selectEdge.
+    const graph = parse(`
+      digraph G {
+        graph [goal="BUG-011 regression"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        gate [type="wait.human"]
+        path_a [shape=box]
+        path_b [shape=box]
+        s -> gate
+        gate -> path_b
+        gate -> path_a [condition="outcome=success"]
+        path_a -> e
+        path_b -> e
+      }
+    `);
+
+    // Custom wait.human handler: simulates user selecting path_b
+    const waitHumanHandler: Handler = {
+      async execute(): Promise<Outcome> {
+        return { status: "success", suggestedNextIds: ["path_b"] };
+      },
+    };
+
+    const registry = new HandlerRegistry({
+      async execute(): Promise<Outcome> { return { status: "success" }; },
+    });
+    registry.register("wait.human", waitHumanHandler);
+
+    const events: PipelineEvent[] = [];
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+      onEvent: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe("success");
+    // The user selected path_b — it must be executed
+    expect(result.completedNodes).toContain("path_b");
+    // path_a matched a condition but must NOT be executed
+    expect(result.completedNodes).not.toContain("path_a");
+
+    // The edge_selected event from gate must point to path_b with reason "suggested"
+    const edgeEvents = events.filter(e => e.kind === "edge_selected") as Array<{
+      kind: "edge_selected"; from: string; to: string; reason: string;
+    }>;
+    const gateEdge = edgeEvents.find(e => e.from === "gate");
+    expect(gateEdge).toBeDefined();
+    expect(gateEdge!.to).toBe("path_b");
+    expect(gateEdge!.reason).toBe("suggested");
+  });
 });

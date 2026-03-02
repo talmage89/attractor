@@ -394,45 +394,90 @@ export async function run(config: RunConfig): Promise<RunResult> {
     }
 
     // f. SELECT NEXT EDGE
-    // Check for a suggested jump (used by ParallelHandler to advance to the
-    // fan-in node without re-traversing branch nodes via selectEdge).
+    // Check for a suggested next node. When a handler sets suggestedNextIds[0],
+    // that routing decision is authoritative and must not be overridden by
+    // condition-based edge selection (BUG-011: WaitForHumanHandler's user
+    // selection was silently discarded when a conditional edge evaluated true).
     const suggestedId = outcome.suggestedNextIds?.[0];
     if (suggestedId) {
       const suggestedNode = graph.nodes.get(suggestedId);
-      const hasDirectEdge = graph.edges.some(
-        (e) => e.from === currentNode.id && e.to === suggestedId
-      );
-      if (suggestedNode && !hasDirectEdge) {
-        emit(config, {
-          kind: "edge_selected",
-          from: currentNode.id,
-          to: suggestedId,
-          label: "",
-          reason: "jump",
-          timestamp: Date.now(),
-        });
-        await saveCheckpoint(
-          {
-            timestamp: Date.now(),
-            currentNode: suggestedId,
-            completedNodes: [...completedNodes],
-            nodeOutcomes: Object.fromEntries(nodeOutcomes),
-            nodeRetries: Object.fromEntries(nodeRetries),
-            contextValues: context.snapshot(),
-            sessionMap: sessionManager.snapshot(),
-            goalGateRetries,
-          },
-          config.logsRoot
+      if (suggestedNode) {
+        const directEdge = graph.edges.find(
+          (e) => e.from === currentNode.id && e.to === suggestedId
         );
-        emit(config, {
-          kind: "checkpoint_saved",
-          nodeId: suggestedId,
-          timestamp: Date.now(),
-        });
-        currentPreviousNodeId = currentNode.id;
-        currentIncomingEdge = undefined;
-        currentNode = suggestedNode;
-        continue loop;
+        if (!directEdge) {
+          // No direct edge — jump directly to the suggested node (used by
+          // ParallelHandler to skip re-traversal of already-executed branches).
+          emit(config, {
+            kind: "edge_selected",
+            from: currentNode.id,
+            to: suggestedId,
+            label: "",
+            reason: "jump",
+            timestamp: Date.now(),
+          });
+          await saveCheckpoint(
+            {
+              timestamp: Date.now(),
+              currentNode: suggestedId,
+              completedNodes: [...completedNodes],
+              nodeOutcomes: Object.fromEntries(nodeOutcomes),
+              nodeRetries: Object.fromEntries(nodeRetries),
+              contextValues: context.snapshot(),
+              sessionMap: sessionManager.snapshot(),
+              goalGateRetries,
+            },
+            config.logsRoot
+          );
+          emit(config, {
+            kind: "checkpoint_saved",
+            nodeId: suggestedId,
+            timestamp: Date.now(),
+          });
+          currentPreviousNodeId = currentNode.id;
+          currentIncomingEdge = undefined;
+          currentNode = suggestedNode;
+          continue loop;
+        } else {
+          // Direct edge exists — follow it immediately, bypassing selectEdge so
+          // that the handler's explicit routing decision is not overridden by a
+          // condition match on another outgoing edge (BUG-011).
+          if (directEdge.loopRestart) {
+            const restartLogsRoot = `${config.logsRoot}-restart-${Date.now()}`;
+            const restartResult = await run({ ...config, logsRoot: restartLogsRoot, resumeFromCheckpoint: undefined });
+            return { ...restartResult, totalCostUsd: totalCostUsd + restartResult.totalCostUsd };
+          }
+          emit(config, {
+            kind: "edge_selected",
+            from: currentNode.id,
+            to: directEdge.to,
+            label: directEdge.label,
+            reason: "suggested",
+            timestamp: Date.now(),
+          });
+          await saveCheckpoint(
+            {
+              timestamp: Date.now(),
+              currentNode: directEdge.to,
+              completedNodes: [...completedNodes],
+              nodeOutcomes: Object.fromEntries(nodeOutcomes),
+              nodeRetries: Object.fromEntries(nodeRetries),
+              contextValues: context.snapshot(),
+              sessionMap: sessionManager.snapshot(),
+              goalGateRetries,
+            },
+            config.logsRoot
+          );
+          emit(config, {
+            kind: "checkpoint_saved",
+            nodeId: directEdge.to,
+            timestamp: Date.now(),
+          });
+          currentPreviousNodeId = currentNode.id;
+          currentIncomingEdge = directEdge;
+          currentNode = graph.nodes.get(directEdge.to)!;
+          continue loop;
+        }
       }
     }
 
