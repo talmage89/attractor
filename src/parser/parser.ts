@@ -442,13 +442,15 @@ class Parser {
     }
   }
 
-  private parseTimeout(value: string): number {
+  private parseTimeout(value: string): number | null {
     // Value may be a duration string like "900s", "15m", or just a number
     if (/^-?\d+(\.\d+)?(ms|s|m|h|d)$/.test(value)) {
       return parseDurationToMs(value);
     }
-    // Plain number in milliseconds
-    return parseFloat(value);
+    // Plain number in milliseconds; return null for unparseable values so
+    // callers can fall back to a safe default instead of receiving NaN
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : null;
   }
 
   private buildEdge(from: string, to: string, explicit: Map<string, string>): Edge {

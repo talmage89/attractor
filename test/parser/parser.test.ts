@@ -238,5 +238,19 @@ describe("parser", () => {
       expect(graph.nodes.get("d")?.timeout).toBe(7200000);
       expect(graph.nodes.get("e")?.timeout).toBe(86400000);
     });
+
+    it("returns null for invalid timeout strings instead of NaN", () => {
+      const graph = parse(`
+        digraph D {
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          a [timeout="notaduration"]
+          b [timeout="abc123"]
+          start -> a -> b -> exit
+        }
+      `);
+      expect(graph.nodes.get("a")?.timeout).toBeNull();
+      expect(graph.nodes.get("b")?.timeout).toBeNull();
+    });
   });
 });

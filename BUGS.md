@@ -1,13 +1,13 @@
 ## BUG-003: Invalid `timeout` value silently becomes `NaN`, killing commands immediately
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / Malformed DOT files
 - **File(s):** `src/parser/parser.ts`, `src/handlers/tool.ts`
 - **Description:** When a node has a `timeout` attribute with an invalid duration string (e.g., `timeout="notaduration"`), `parseDurationToMs()` returns `NaN` via `parseFloat()`. This `NaN` is stored as `node.timeout`. In `ToolHandler.execute`, the fallback `node.timeout ?? 30_000` does NOT catch `NaN` (the `??` operator only catches `null`/`undefined`), so `timeoutMs = NaN` is passed to `setTimeout`. JavaScript's `setTimeout(fn, NaN)` treats the delay as `0`, causing the timer to fire at the next event loop tick — immediately killing the child process before it has a chance to run.
 - **Expected:** An invalid timeout value should either (a) be silently ignored (falling back to the 30s default) or (b) be rejected with a parse/validation error. Commands should NOT be silently killed.
 - **Actual:** `sleep 2 && echo done` with `timeout="notaduration"` completes in 0.0s with `fail` status. The command is killed before it can run.
 - **Reproduction:** Create a DOT file with `work [type=tool tool_command="sleep 2 && echo done" timeout="notaduration"]`. Run it. The `work` node completes in `0.0s` with `fail` status instead of running for ~2 seconds.
-- **Fix:** In `parseDurationToMs`, return `null` (changing the return type to `number | null`) when the value cannot be parsed as a valid duration. Update `parseTimeout` in the parser accordingly. Alternatively, add a `Number.isFinite(node.timeout)` guard in `ToolHandler.execute`.
+- **Fix:** Changed `parseTimeout` return type to `number | null`; returns `null` when `parseFloat` produces a non-finite value. `ToolHandler`'s `node.timeout ?? 30_000` then correctly falls back to the default. Added regression test. 357 tests passing.
 
 ---
 
