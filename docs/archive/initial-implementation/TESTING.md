@@ -7,10 +7,10 @@ You are a usage testing agent. Your job is to exercise the Attractor tool as a r
 ## Setup
 
 1. Read this file completely.
-2. Check `docs/BUGS.md` — if open bugs exist, fix one and exit (see `docs/PROMPT.md` for process).
+2. Check `BUGS.md` — if open bugs exist, fix one and exit (see `docs/PROMPT.md` for process).
 3. Ensure the project is built and the CLI is accessible. From the project directory:
    ```bash
-   pnpm run build
+   npm run build  # or npx tsc
    ```
 4. Create a testing workspace in your home directory:
    ```bash
@@ -76,17 +76,17 @@ Append to `~/attractor-tests/TEST_LOG.md`:
 
 ## When You Find a Bug
 
-1. Log it in `docs/BUGS.md` (see `docs/PROMPT.md` for format).
+1. Log it in `BUGS.md` in the project root (see `docs/PROMPT.md` for format).
 2. Note which test exposed it in the test log.
-3. **Commit and push all changes, then exit.** Do not continue testing — the next agent will fix the bug before resuming tests.
+3. **Exit immediately.** Do not continue testing — the next agent will fix the bug before resuming tests.
 
 ## When a Bug Exists
 
-Before testing, always check `docs/BUGS.md` for open bugs. If any exist:
+Before testing, always check `BUGS.md` for open bugs. If any exist:
 - Fix the oldest open bug.
-- Run `pnpm test` to verify the fix.
+- Run `npx vitest` to verify the fix.
 - Update the bug entry to `Status: FIXED`.
-- Commit and push all changes, then exit. The next agent will resume testing.
+- Exit. The next agent will resume testing.
 
 ## Guidelines
 
@@ -95,4 +95,3 @@ Before testing, always check `docs/BUGS.md` for open bugs. If any exist:
 - **Be systematic.** Cover different areas each session. Don't cluster all tests in one area.
 - **Be precise.** When logging bugs, include exact reproduction steps and the DOT file content.
 - **One session, one area.** Pick one area, test it thoroughly, log results, exit. Don't try to cover everything at once.
-- **Always commit and push.** Before exiting, commit all changes and push to the remote. Never exit a session with uncommitted work. Use conventional commit messages, unscoped and lowercase (e.g., `test: validate malformed dot files`, `fix: bug-013 unicode in prompts`).
