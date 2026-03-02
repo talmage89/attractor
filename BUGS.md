@@ -1,3 +1,16 @@
+## BUG-008: `auto_status=true` masks CC infrastructure failures
+
+- **Status:** FIXED
+- **Found during:** Testing / Session Reuse (#16)
+- **File(s):** `src/handlers/codergen.ts`
+- **Description:** The `auto_status` check at line 249 uses the condition `node.autoStatus && statusFileAbsent && outcome.status === "fail"`. This fires not only when the CC agent ran but forgot to write a status file, but also when the CC process itself failed entirely (e.g., no API key, process exit code 1). This silently masks infrastructure failures: a node with `auto_status=true` always shows `status: "success"` even if the CC agent never ran. The spec (Section 9.5, step 9) uses `outcome.status === undefined` (which is never true, making it dead code), but the implementation changed it to `"fail"` without restricting to CC-success cases.
+- **Expected:** `auto_status=true` should only override the outcome to "success" when the CC process itself succeeded (`ccResult.success=true`). A CC infrastructure failure (process exit code 1, no API key, etc.) should remain "fail" regardless of `auto_status`.
+- **Actual:** With `auto_status=true`, any CC failure (including "Claude Code process exited with code 1") is overridden to `{ status: "success", notes: "auto-status: agent completed without writing status.json" }`. The pipeline proceeds as if the node succeeded.
+- **Reproduction:** Create a DOT file with `node1 [type=codergen auto_status=true prompt="do something"]`. Run without an API key. Node1 shows "success (0.4s)" in the CLI, and `status.json` shows `{ "status": "success", "notes": "auto-status: agent completed without writing status.json" }`.
+- **Fix:** Added `&& ccResult.success` to the auto_status condition in `codergen.ts:249`. The check now reads `node.autoStatus && statusFileAbsent && ccResult.success && outcome.status === "fail"`, which ensures auto_status only fires when the CC process actually ran (not when it failed to start). Updated the existing auto_status test that incorrectly expected "success" on CC failure, and added a comment explaining the guard. 364 tests passing.
+
+---
+
 ## BUG-007: Resume from failed run duplicates the failed node in `completedNodes`
 
 - **Status:** FIXED

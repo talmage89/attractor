@@ -454,7 +454,10 @@ describe("CodergenHandler", () => {
     ).rejects.toThrow(/would escape logsRoot/);
   });
 
-  it("autoStatus=true: returns success when CC fails and no status file is written", async () => {
+  it("autoStatus=true: does NOT mask CC infrastructure failure (process exit code 1)", async () => {
+    // auto_status=true should only suppress "no status file written" situations when the CC
+    // agent actually ran. If the CC process itself fails (no API key, process exit), the node
+    // must still report fail so the pipeline owner can diagnose the infrastructure problem.
     const graph = parse(`
       digraph G {
         graph [goal="Test"]
@@ -466,7 +469,7 @@ describe("CodergenHandler", () => {
     `);
 
     mockRunCC.mockResolvedValueOnce(
-      makeCCResult({ success: false, errors: ["Agent crashed"], errorSubtype: "error_during_execution" })
+      makeCCResult({ success: false, errors: ["Claude Code process exited with code 1"], errorSubtype: "error_during_execution" })
     );
 
     const handler = new CodergenHandler(sessionManager);
@@ -478,11 +481,11 @@ describe("CodergenHandler", () => {
       config as any
     );
 
-    expect(outcome.status).toBe("success");
-    expect(outcome.notes).toContain("auto-status");
+    expect(outcome.status).toBe("fail");
+    expect(outcome.failureReason).toContain("Claude Code process exited with code 1");
   });
 
-  it("autoStatus=false (default): still returns fail when CC fails and no status file", async () => {
+  it("autoStatus=false (default): returns fail when CC fails and no status file", async () => {
     const graph = parse(`
       digraph G {
         graph [goal="Test"]

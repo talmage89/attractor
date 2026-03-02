@@ -243,10 +243,12 @@ export class CodergenHandler implements Handler {
       }
     }
 
-    // 8.5 AUTO STATUS: when auto_status=true and no status file was written, override
-    // a fail outcome to success so the pipeline can proceed past nodes that don't need
-    // to communicate structured results (spec Section 9.5, step 9).
-    if (node.autoStatus && statusFileAbsent && outcome.status === "fail") {
+    // 8.5 AUTO STATUS: when auto_status=true and the CC agent ran successfully but
+    // did not write a status file, override a fail outcome to success so the pipeline
+    // can proceed past nodes that don't need to communicate structured results
+    // (spec Section 9.5, step 9). The ccResult.success guard ensures we do NOT mask
+    // CC infrastructure failures (e.g., no API key, process exit code 1).
+    if (node.autoStatus && statusFileAbsent && ccResult.success && outcome.status === "fail") {
       outcome = {
         status: "success",
         notes: "auto-status: agent completed without writing status.json",
