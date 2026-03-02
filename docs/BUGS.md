@@ -1,3 +1,27 @@
+## BUG-018: `default_max_retry` with a non-integer value causes NaN, silently failing all nodes
+
+- **Status:** OPEN
+- **Found during:** Testing / DOT Grammar Edge Cases (#42)
+- **File(s):** `src/parser/parser.ts`, `src/engine/retry.ts`
+- **Description:** When `default_max_retry` is set to a non-integer string value (e.g. `default_max_retry = "abc"`, `default_max_retry = "invalid"`, or `default_max_retry = ""`), the parser calls `parseInt(value, 10)` which returns `NaN`. This NaN is stored in `graph.attributes.defaultMaxRetry`. In `buildRetryPolicy()`, `maxRetries = NaN` (since `node.maxRetries > 0` is false for the default 0), producing `maxAttempts = NaN + 1 = NaN`. In `executeWithRetry`, the BUG-012 clamp `startAttempt = Math.min(1, NaN) = NaN`, and the loop `for (attempt=NaN; attempt<=NaN; attempt++)` never executes (NaN comparisons are always false). Every node immediately returns `{ status: "fail", failureReason: "max retries exceeded" }` without ever calling its handler. This affects ALL nodes — start, tool, codergen, and exit — so the entire pipeline silently fails without executing any work. Neither `attractor validate` nor `attractor run` emits any error or warning for an invalid `default_max_retry` value.
+- **Expected:** Either (a) `validate` should emit a warning like `[warning] (invalid_default_max_retry) default_max_retry "abc" is not a valid integer; using default (50)` and `run` should fall back to the default value of 50; or (b) `validate` should emit an error with exit code 2 and refuse to run the pipeline. An invalid `default_max_retry` should never silently cause all nodes to fail.
+- **Actual:** All nodes fail with `fail (0.0s)` and `failureReason: "max retries exceeded"` without executing. The pipeline reports `Status: fail` with exit code 1. No parse error, no validation error, no warning. The bug is completely invisible to the user.
+- **Note:** Node-level `max_retries="bad"` is NOT affected: `parseInt("bad", 10) = NaN`, but `NaN > 0` is false, so `buildRetryPolicy` correctly falls back to `graph.attributes.defaultMaxRetry`. Only the graph-level `default_max_retry` attribute lacks this safety check.
+- **Reproduction:**
+  ```dot
+  digraph g {
+    default_max_retry = "invalid"
+    start [shape=Mdiamond]
+    work [type=tool tool_command="echo this_should_run"]
+    end [shape=Msquare]
+    start -> work
+    work -> end
+  }
+  ```
+  Run: `attractor run test.dot --logs ./logs`. Every node shows `fail (0.0s)`. `echo this_should_run` never executes. Also triggered by `default_max_retry = ""` (empty string) or any non-numeric string.
+
+---
+
 ## BUG-017: Multiple attribute blocks on the same node/edge statement — only first block is parsed
 
 - **Status:** FIXED
