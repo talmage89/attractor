@@ -10,6 +10,8 @@ import type { Handler } from "../../src/handlers/registry.js";
 import type { Outcome } from "../../src/model/outcome.js";
 import { SessionManager } from "../../src/backend/session-manager.js";
 import { saveCheckpoint } from "../../src/model/checkpoint.js";
+import { ParallelHandler } from "../../src/handlers/parallel.js";
+import { FanInHandler } from "../../src/handlers/fan-in.js";
 
 // Mock handler that returns configurable outcomes
 class MockHandler implements Handler {
@@ -900,6 +902,53 @@ describe("execution engine", () => {
     expect(nodeIds).toContain("e");
     // The completed node ids (s, a, b) should NOT appear as checkpoint nodeIds
     expect(nodeIds).not.toContain("s");
+  });
+
+  it("parallel branches execute exactly once (not re-traversed by outer runner)", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test parallel no re-execute"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component]
+        branch_a [shape=box]
+        branch_b [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> branch_a
+        fork -> branch_b
+        branch_a -> join
+        branch_b -> join
+        join -> e
+      }
+    `);
+
+    const callLog: string[] = [];
+    const mockHandler: Handler = {
+      async execute(node: any): Promise<Outcome> {
+        callLog.push(node.id);
+        return { status: "success" };
+      },
+    };
+
+    const registry = new HandlerRegistry(mockHandler);
+    registry.register("parallel", new ParallelHandler(registry));
+    registry.register("parallel.fan_in", new FanInHandler());
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    expect(result.status).toBe("success");
+    // Each branch must execute exactly once — the outer runner must NOT re-traverse them
+    expect(callLog.filter((id) => id === "branch_a")).toHaveLength(1);
+    expect(callLog.filter((id) => id === "branch_b")).toHaveLength(1);
+    // The fan-in node must appear in completedNodes (runner advanced to it correctly)
+    expect(result.completedNodes).toContain("join");
   });
 
   it("emits a warning when checkpoint currentNode is not found in graph", async () => {

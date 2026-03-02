@@ -377,6 +377,47 @@ export async function run(config: RunConfig): Promise<RunResult> {
     }
 
     // f. SELECT NEXT EDGE
+    // Check for a suggested jump (used by ParallelHandler to advance to the
+    // fan-in node without re-traversing branch nodes via selectEdge).
+    const suggestedId = outcome.suggestedNextIds?.[0];
+    if (suggestedId) {
+      const suggestedNode = graph.nodes.get(suggestedId);
+      const hasDirectEdge = graph.edges.some(
+        (e) => e.from === currentNode.id && e.to === suggestedId
+      );
+      if (suggestedNode && !hasDirectEdge) {
+        emit(config, {
+          kind: "edge_selected",
+          from: currentNode.id,
+          to: suggestedId,
+          label: "",
+          reason: "jump",
+          timestamp: Date.now(),
+        });
+        await saveCheckpoint(
+          {
+            timestamp: Date.now(),
+            currentNode: suggestedId,
+            completedNodes: [...completedNodes],
+            nodeOutcomes: Object.fromEntries(nodeOutcomes),
+            nodeRetries: Object.fromEntries(nodeRetries),
+            contextValues: context.snapshot(),
+            sessionMap: sessionManager.snapshot(),
+          },
+          config.logsRoot
+        );
+        emit(config, {
+          kind: "checkpoint_saved",
+          nodeId: suggestedId,
+          timestamp: Date.now(),
+        });
+        currentPreviousNodeId = currentNode.id;
+        currentIncomingEdge = undefined;
+        currentNode = suggestedNode;
+        continue loop;
+      }
+    }
+
     const edge = selectEdge(graph, currentNode, outcome, context);
 
     if (edge === null) {

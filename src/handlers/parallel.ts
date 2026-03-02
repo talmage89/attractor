@@ -11,6 +11,36 @@ function isFanInNode(node: GraphNode): boolean {
   return node.shape === "tripleoctagon" || node.type === "parallel.fan_in";
 }
 
+/**
+ * BFS from the fanout node's direct children to find the first fan-in node.
+ * Returns the fan-in node ID, or null if none is found.
+ */
+function findFanInNodeId(graph: Graph, fanoutNodeId: string): string | null {
+  const visited = new Set<string>();
+  const queue: string[] = [];
+  for (const edge of outgoingEdges(graph, fanoutNodeId)) {
+    if (!visited.has(edge.to)) {
+      visited.add(edge.to);
+      queue.push(edge.to);
+    }
+  }
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const node = graph.nodes.get(current);
+    if (!node) continue;
+    if (isFanInNode(node)) {
+      return current;
+    }
+    for (const edge of outgoingEdges(graph, current)) {
+      if (!visited.has(edge.to)) {
+        visited.add(edge.to);
+        queue.push(edge.to);
+      }
+    }
+  }
+  return null;
+}
+
 export async function executeBranch(
   startNodeId: string,
   context: Context,
@@ -169,10 +199,12 @@ export class ParallelHandler implements Handler {
     }
 
     const totalBranchCostUsd = results.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+    const fanInId = findFanInNodeId(graph, node.id);
     return {
       status,
       contextUpdates,
       ...(totalBranchCostUsd > 0 ? { costUsd: totalBranchCostUsd } : {}),
+      ...(fanInId ? { suggestedNextIds: [fanInId] } : {}),
     };
   }
 }

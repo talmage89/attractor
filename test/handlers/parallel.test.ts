@@ -261,6 +261,61 @@ describe("ParallelHandler", () => {
     expect(outcome.costUsd).toBeCloseTo(0.08);
   });
 
+  it("returns suggestedNextIds pointing to the fan-in node", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test suggestedNextIds"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component]
+        branch_a [shape=box]
+        branch_b [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> branch_a
+        fork -> branch_b
+        branch_a -> join
+        branch_b -> join
+        join -> e
+      }
+    `);
+
+    const registry = new HandlerRegistry(new MockHandler());
+    const handler = new ParallelHandler(registry);
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, new Context(), graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(outcome.suggestedNextIds).toEqual(["join"]);
+  });
+
+  it("omits suggestedNextIds when no fan-in node exists in the subgraph", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test no fan-in"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component]
+        branch_a [shape=box]
+        s -> fork
+        fork -> branch_a
+        branch_a -> e
+      }
+    `);
+
+    const registry = new HandlerRegistry(new MockHandler());
+    const handler = new ParallelHandler(registry);
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, new Context(), graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(outcome.suggestedNextIds).toBeUndefined();
+  });
+
   it("omits costUsd when branches report no cost", async () => {
     const graph = parse(`
       digraph G {

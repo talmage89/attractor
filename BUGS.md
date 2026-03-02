@@ -1,6 +1,6 @@
 ## BUG-004: Parallel branches re-execute after `ParallelHandler` completes; runner has no jump-to-fan-in mechanism
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / Parallel Execution (#13)
 - **File(s):** `src/handlers/parallel.ts`, `src/engine/runner.ts`
 - **Description:** `ParallelHandler.execute()` runs all branch nodes internally (via `executeBranch`) before returning. After it returns, the outer runner calls `selectEdge(graph, fanoutNode, outcome, context)` to determine the next node. Since the only outgoing edges from the parallel (fan-out) node go to the branch nodes (e.g. `fanout -> branch_a`, `fanout -> branch_b`, `fanout -> branch_c`), `selectEdge` picks one of the branch nodes (the lexically-first one: `branch_a`). The runner then executes `branch_a` again. Execution then follows `branch_a -> fanin`, and the runner continues normally. The net result is: `branch_a` executes **twice** (once inside `ParallelHandler`, once by the outer runner), while `branch_b` and `branch_c` execute **only once** (inside `ParallelHandler`). The CLI progress output also only shows `branch_a` running — branches b and c are completely invisible to the outer runner.
@@ -8,6 +8,7 @@
 - **Actual:** The runner re-executes one branch (lexically first by node ID) and silently skips the rest. The checkpoint reflects branch_a in `completedNodes` but not branch_b or branch_c. `parallel.results` correctly contains all 3 results (set by ParallelHandler), but the runner's traversal is semantically wrong.
 - **Reproduction:** Create a DOT file with `fanout [shape=component]`, three branches (`branch_a`, `branch_b`, `branch_c`, each `shape=parallelogram`), and a `fanin [shape=tripleoctagon]` node. Run with tool_commands like `echo branch_X_done`. Observe that: (a) CLI only shows branch_a running, (b) checkpoint `completedNodes` contains only `branch_a` (not b/c), (c) the echo command for branch_a runs twice (visible in tool.output reflecting branch_a's output).
 - **Proposed fix:** `ParallelHandler` should identify the fan-in node (by traversing the first branch until a fan-in is reached) and include it in the outcome as `suggestedNextIds: [fanInNodeId]`. The runner should then be modified to support "jump" navigation: if `suggestedNextIds` contains an ID with no direct edge from the current node, advance to that node directly (i.e., set `currentNode = graph.nodes.get(suggestedNextIds[0])` without requiring an edge). This allows the runner to skip from the parallel node to the fan-in without traversing the branches again.
+- **Fix:** Added `findFanInNodeId()` BFS helper to `parallel.ts`; `execute()` now includes `suggestedNextIds: [fanInId]` in its outcome. In `runner.ts`, before `selectEdge`, added a jump check: if `outcome.suggestedNextIds[0]` is valid and has no direct edge from the current node, the runner emits `edge_selected` (reason: "jump"), saves a checkpoint, and advances directly to the suggested node. Added 3 new tests (2 unit + 1 integration). 360 tests passing.
 
 ---
 
