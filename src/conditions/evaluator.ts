@@ -25,7 +25,7 @@ export function evaluateCondition(
 
   const clauses = parseCondition(condition);
   for (const clause of clauses) {
-    const resolved = resolveKey(clause.key, outcome, context);
+    const resolved = resolveKey(clause.key, outcome, context).trim();
     if (clause.operator === "=") {
       if (resolved !== clause.value) return false;
     } else {

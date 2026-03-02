@@ -148,6 +148,25 @@ describe("condition evaluator", () => {
     expect(evaluateCondition("context.has_flag", { status: "success" }, new Context())).toBe(false);
   });
 
+  it("trims trailing newline in resolved context value (BUG-005)", () => {
+    // Tool stdout stored with trailing newline (e.g. `echo linux` → "linux\n")
+    const ctx = makeContext({ "tool.output": "linux\n" });
+    expect(evaluateCondition(
+      "context.tool.output=linux",
+      { status: "success" },
+      ctx
+    )).toBe(true);
+  });
+
+  it("trims whitespace on both sides of resolved value", () => {
+    const ctx = makeContext({ "result": "  yes  " });
+    expect(evaluateCondition(
+      "context.result=yes",
+      { status: "success" },
+      ctx
+    )).toBe(true);
+  });
+
   it("resolveKey does not fall through when context.key is explicitly empty string", () => {
     // When the full key "context.flag" exists with value "", it should return ""
     // not fall through to look up "flag" which might have a different value

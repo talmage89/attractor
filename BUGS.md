@@ -1,12 +1,13 @@
 ## BUG-005: Condition evaluator does not trim resolved context values before comparison
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / Context Propagation (#14)
 - **File(s):** `src/conditions/evaluator.ts`
 - **Description:** The spec (Section 13, line 1772) says equality comparison is "case-sensitive, trimmed", implying both sides of the comparison should be trimmed. The condition parser already trims the clause value (`clause.value = clause.slice(eqIdx + 1).trim()`), but the resolved context value is never trimmed. Tool nodes store their stdout as-is in `tool.output`, which always includes a trailing newline from shell commands like `echo`. As a result, `context.tool.output=linux` FAILS when the tool ran `echo linux` (which stores `"linux\n"`), because `"linux\n" !== "linux"`. The user must use `printf linux` (no newline) to get the match to work, which is non-obvious.
 - **Expected:** Condition equality comparison should trim the resolved value before comparing, so `context.tool.output=linux` matches when `echo linux` was run (output: `"linux\n"`). This aligns with the spec's "trimmed" qualifier and makes conditions practical for echo-based tool output.
 - **Actual:** `context.tool.output=linux` does not match when the tool output is `"linux\n"`. The comparison is `"linux\n" !== "linux"` which is true (mismatch), so the condition evaluates to false. Users must strip trailing newlines manually (e.g., use `printf` or `tr -d '\n'`).
 - **Reproduction:** Create a pipeline: `tool [type=tool tool_command="echo linux"]`, edge condition `context.tool.output=linux`. The condition does not match. Switching to `tool_command="printf linux"` makes it match.
+- **Fix:** Changed `resolveKey(...)` call in `evaluateCondition` to `.trim()` the resolved value before comparing. Added 2 regression tests. 362 tests passing.
 
 ---
 
