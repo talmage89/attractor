@@ -286,4 +286,20 @@ describe("parser", () => {
       expect(graph.edges[1]).toMatchObject({ from: "work", to: "end" });
     });
   });
+
+  describe("multiple attribute blocks (BUG-017)", () => {
+    it("merges multiple attribute blocks on the same node statement", () => {
+      const graph = parse(fixtures.WITH_MULTI_ATTR_BLOCKS);
+      const work = graph.nodes.get("work");
+      expect(work?.type).toBe("tool");
+      expect(work?.raw.get("tool_command")).toBe("echo two_block_test");
+    });
+
+    it("merges multiple attribute blocks on the same edge statement", () => {
+      const graph = parse(fixtures.WITH_MULTI_ATTR_BLOCKS);
+      const edge = graph.edges.find((e) => e.from === "work" && e.to === "end");
+      expect(edge?.condition).toBe("outcome=success");
+      expect(edge?.label).toBe("success route");
+    });
+  });
 });

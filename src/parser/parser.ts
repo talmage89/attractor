@@ -333,8 +333,11 @@ class Parser {
     }
 
     if (chain.length > 1) {
-      // Edge chain
-      const attrs = this.check("LBRACKET") ? this.parseAttrBlock() : new Map<string, string>();
+      // Edge chain — merge all consecutive attribute blocks (DOT allows multiple)
+      const attrs = new Map<string, string>();
+      while (this.check("LBRACKET")) {
+        for (const [k, v] of this.parseAttrBlock()) attrs.set(k, v);
+      }
       this.consumeOptionalSemicolon();
 
       for (let i = 0; i < chain.length - 1; i++) {
@@ -357,8 +360,11 @@ class Parser {
       return;
     }
 
-    // Node declaration
-    const attrs = this.check("LBRACKET") ? this.parseAttrBlock() : new Map<string, string>();
+    // Node declaration — merge all consecutive attribute blocks (DOT allows multiple)
+    const attrs = new Map<string, string>();
+    while (this.check("LBRACKET")) {
+      for (const [k, v] of this.parseAttrBlock()) attrs.set(k, v);
+    }
     this.consumeOptionalSemicolon();
 
     const node = this.buildNode(id, attrs);

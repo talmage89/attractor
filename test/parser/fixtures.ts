@@ -179,6 +179,17 @@ digraph g {
 }
 `;
 
+// BUG-017: multiple attribute blocks on node and edge statements — only first was parsed
+export const WITH_MULTI_ATTR_BLOCKS = `
+digraph g {
+  start [shape=Mdiamond]
+  work [type=tool] [tool_command="echo two_block_test"]
+  end [shape=Msquare]
+  start -> work
+  work -> end [condition="outcome=success"] [label="success route"]
+}
+`;
+
 // --- Invalid DOT for error testing ---
 
 export const INVALID_UNDIRECTED = `

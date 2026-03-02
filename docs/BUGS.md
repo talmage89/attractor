@@ -1,6 +1,6 @@
 ## BUG-017: Multiple attribute blocks on the same node/edge statement — only first block is parsed
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / DOT Default Node/Edge Attribute Blocks (#37)
 - **File(s):** `src/parser/parser.ts`
 - **Description:** When a node or edge statement has multiple consecutive attribute blocks (e.g., `work [type=tool] [tool_command="echo hello"]`), only the first block is parsed. The second (and any subsequent) blocks are silently discarded. The DOT format explicitly supports multiple attribute blocks on a single statement — they should be merged together. The root cause is in `parseIdentifierStatement()`: after parsing the first `LBRACKET...RBRACKET` block, `consumeOptionalSemicolon()` is called and the function returns. The parser then returns to `parseStatements()` where the next `[` (LBRACKET) token is not matched by any of the `if` branches and falls through to `// Skip unknown tokens → this.advance()`, which silently consumes just the `[`. The interior key-value pairs of the second block are then parsed as top-level graph attributes (the `IDENTIFIER = value` branch in `parseIdentifierStatement()`), and the closing `]` is also silently skipped.
@@ -23,7 +23,7 @@
   work -> target [condition="outcome=fail"] [label="failure route"]
   ```
   The edge gets the `condition` from the first block but silently loses the `label` from the second block.
-- **Fix:** In `parseIdentifierStatement()`, change the single `this.check("LBRACKET") ? this.parseAttrBlock() : new Map<string, string>()` call to a loop that merges all consecutive attribute blocks: `const attrs = new Map(); while (this.check("LBRACKET")) { for (const [k,v] of this.parseAttrBlock()) attrs.set(k, v); }`. This applies to both the node declaration path (line 361) and the edge chain path (line 337). Optionally apply the same fix to `graph [...]`, `node [...]`, and `edge [...]` default block statements in `parseStatement()` for consistency (though multiple separate `node [...]` statements already work correctly).
+- **Fix:** In `parseIdentifierStatement()`, replaced the single `this.check("LBRACKET") ? this.parseAttrBlock() : new Map<string, string>()` expressions with a `while (this.check("LBRACKET"))` loop that merges all consecutive attribute blocks via `for (const [k,v] of this.parseAttrBlock()) attrs.set(k, v)`. Applied to both the node declaration path and the edge chain path. Added fixture `WITH_MULTI_ATTR_BLOCKS` and 2 regression tests. 376 tests passing.
 
 ---
 
