@@ -1,3 +1,32 @@
+## BUG-020: Invalid `weight` value on an edge becomes NaN, causing declaration-order-dependent edge selection
+
+- **Status:** OPEN
+- **Found during:** Testing / Edge Weight Priority (#46)
+- **File(s):** `src/parser/parser.ts`, `src/engine/edge-selection.ts`
+- **Description:** When an edge has a `weight` attribute with a non-numeric string value (e.g., `weight="not_a_number"` or `weight="abc"`), the parser calls `parseInt(value, 10)` which returns `NaN`. This NaN is stored in `edge.weight`. In `pickBestEdge()` in `edge-selection.ts`, the comparison `e.weight > best.weight` with NaN always returns false (NaN comparisons are always false in JavaScript). Similarly, the tiebreak check `e.weight === best.weight` with NaN also returns false. As a result, the initial `best = edges[0]` is never replaced, and the **first-declared edge in the DOT file always "wins"** among unconditional edges when any edge has a NaN weight. This is incorrect — the spec defines a deterministic priority algorithm based on weight values, but NaN defeats the comparison entirely.
+- **Expected:** Invalid edge weight strings should fall back to the default weight (0) silently (matching the behavior of unset weight). Optionally, the validator should emit a `[warning] (invalid_edge_weight)` diagnostic for non-integer weight values. The edge selection algorithm should never produce declaration-order-dependent results.
+- **Actual:** Declaration-order-dependent edge selection when any edge has a non-numeric weight. With `work -> path_a [weight="bad"]` declared before `work -> path_b [weight=1]`, `path_a` is always selected (even though weight=NaN < weight=1). With the declaration order swapped, `path_b` is always selected. Neither `validate` nor `run` emits any warning about the invalid weight.
+- **Note:** This is analogous to BUG-018 (`default_max_retry` non-integer → NaN → all nodes fail), but for edge weights. In this case, the failure mode is incorrect routing rather than node execution failure. Also note: `parseFloat` would be required for float weights (which the spec shows as `number` type), but the current implementation uses `parseInt`, silently truncating floats like `1.8 → 1`. The NaN fix for invalid strings is the critical issue.
+- **Reproduction:**
+  ```dot
+  digraph g {
+    start [shape=Mdiamond]
+    work [type=tool tool_command="echo done"]
+    path_a [type=tool tool_command="echo path_a"]
+    path_b [type=tool tool_command="echo path_b"]
+    end [shape=Msquare]
+    start -> work
+    work -> path_a [weight="not_a_number"]
+    work -> path_b [weight=1]
+    path_a -> end
+    path_b -> end
+  }
+  ```
+  Run: `attractor run test.dot --logs ./logs`. `path_a` is selected (declaration order wins) despite `path_b` having weight=1.
+  Swap the two edge declarations: now `path_b` is selected. Both behaviors are wrong — `path_b` (weight=1 > 0 default) should always win, regardless of declaration order.
+
+---
+
 ## BUG-019: Subgraph with empty-derived class appends trailing comma to node's existing `class=` attribute
 
 - **Status:** FIXED
