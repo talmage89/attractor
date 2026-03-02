@@ -18,7 +18,7 @@ This is the seventeenth code review pass of the Attractor TypeScript DAG pipelin
 
 - **Severity:** LOW
 - **Category:** Integration / Code Quality
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **File(s):** `src/index.ts`
 - **Description:** The public API exports `validate()` and `validateOrThrow()`, both of which return `Diagnostic[]`. However, `Diagnostic` itself (and the related `Severity` type and `LintRule` function type) are not exported from `src/index.ts`:
 

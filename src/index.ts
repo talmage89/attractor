@@ -2,6 +2,8 @@ export { run } from "./engine/runner.js";
 export type { RunConfig, RunResult } from "./engine/runner.js";
 export { parse } from "./parser/parser.js";
 export { validate, validateOrThrow } from "./validation/validator.js";
+export type { Diagnostic, Severity } from "./validation/diagnostic.js";
+export type { LintRule } from "./validation/rules.js";
 export type { Graph, GraphNode, Edge } from "./model/graph.js";
 export type { Outcome, StageStatus } from "./model/outcome.js";
 export type { PipelineEvent } from "./model/events.js";
