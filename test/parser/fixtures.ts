@@ -190,6 +190,21 @@ digraph g {
 }
 `;
 
+// BUG-019: subgraph with all-special-char label → empty derived class must not
+// append a trailing comma to a node's existing class= attribute
+export const WITH_SUBGRAPH_EMPTY_DERIVED_CLASS = `
+digraph g {
+  start [shape=Mdiamond]
+  subgraph s {
+    label = "!!!"
+    step1 [type=tool class=existing]
+    step2 [type=tool]
+  }
+  end [shape=Msquare]
+  start -> step1 -> step2 -> end
+}
+`;
+
 // --- Invalid DOT for error testing ---
 
 export const INVALID_UNDIRECTED = `

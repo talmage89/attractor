@@ -1,6 +1,6 @@
 ## BUG-019: Subgraph with empty-derived class appends trailing comma to node's existing `class=` attribute
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found during:** Testing / Subgraph Features (#43)
 - **File(s):** `src/parser/parser.ts`
 - **Description:** When a subgraph has a `label` attribute whose derived class name is empty (e.g. `label = "!!!"` where all characters are stripped by `deriveClassName`), the empty string `""` is pushed to `subgraphClassStack`. In the node-creation code, the class appending loop runs for every entry in `subgraphClassStack`. For a node with an existing `class=` attribute (e.g. `class=existing`), the check `["existing"].includes("")` is false, so the code appends the empty string: `node.className = "existing" + "," + "" = "existing,"`. The trailing comma in `className` is incorrect data. For nodes without an existing class, the case `if (!node.className)` fires and assigns `""` to `""`, which is harmless.
@@ -19,7 +19,7 @@
   }
   ```
   Parse and inspect: `g.nodes.get('step1').className === "existing,"` (expected `"existing"`).
-- **Fix:** In `deriveClassName` call site in `parseSubgraph()`, check the derived class before pushing: `const derivedClass = deriveClassName(subgraphLabel); if (derivedClass) this.subgraphClassStack.push(derivedClass);`. Alternatively, add `if (!cls) continue;` at the top of the class-appending loop in `buildNode`.
+- **Fix:** In `parseSubgraph()`, after calling `deriveClassName(subgraphLabel)`, check the result is non-empty before pushing: `const derivedClass = deriveClassName(subgraphLabel); if (derivedClass) this.subgraphClassStack.push(derivedClass);`. Empty strings from all-special-char labels like `"!!!"` are now silently skipped rather than pushed onto the stack. Added fixture `WITH_SUBGRAPH_EMPTY_DERIVED_CLASS` and 2 regression tests. 385 tests passing.
 
 ---
 

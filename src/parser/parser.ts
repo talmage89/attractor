@@ -276,7 +276,10 @@ class Parser {
     // label statement still receive the derived class (BUG-013).
     const subgraphLabel = this.findSubgraphLabel();
     if (subgraphLabel) {
-      this.subgraphClassStack.push(deriveClassName(subgraphLabel));
+      const derivedClass = deriveClassName(subgraphLabel);
+      // Only push non-empty derived classes; an all-special-char label like "!!!"
+      // produces "" which must not be appended to node.className (BUG-019).
+      if (derivedClass) this.subgraphClassStack.push(derivedClass);
     }
 
     while (!this.check("RBRACE") && !this.check("EOF")) {

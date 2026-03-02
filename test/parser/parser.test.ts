@@ -303,6 +303,20 @@ describe("parser", () => {
     });
   });
 
+  describe("subgraph empty derived class (BUG-019)", () => {
+    it("does not append trailing comma to existing class when derived class is empty", () => {
+      const graph = parse(fixtures.WITH_SUBGRAPH_EMPTY_DERIVED_CLASS);
+      // step1 has class=existing; deriveClassName("!!!") === "" → must not append
+      expect(graph.nodes.get("step1")?.className).toBe("existing");
+    });
+
+    it("does not set className when derived class is empty and node has no class", () => {
+      const graph = parse(fixtures.WITH_SUBGRAPH_EMPTY_DERIVED_CLASS);
+      // step2 has no class; derived class from label "!!!" is "" → must remain ""
+      expect(graph.nodes.get("step2")?.className).toBe("");
+    });
+  });
+
   describe("default_max_retry parsing (BUG-018)", () => {
     it("falls back to default (50) when default_max_retry is a non-integer string", () => {
       const graph = parse(`
