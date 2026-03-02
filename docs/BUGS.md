@@ -1,3 +1,27 @@
+## BUG-015: `spawn ENOTDIR` (file path as `--cwd`) silently retries 51 times with exponential backoff, hanging for many minutes
+
+- **Status:** OPEN
+- **Found during:** Testing / `--cwd` flag and `$goal` substitution (#34)
+- **File(s):** `src/handlers/tool.ts`
+- **Description:** When `--cwd` is set to a FILE path (e.g., `--cwd /etc/hostname`) instead of a directory, Node.js's `spawn()` throws **synchronously** with `Error: spawn ENOTDIR`. This synchronous throw propagates through the `new Promise()` constructor in `runShellCommand`, causing the Promise to be **rejected** (not resolved). When the `await runShellCommand(...)` in `ToolHandler.execute` receives this rejection, it re-throws, which is caught by `executeWithRetry`'s catch block. Since it's an exception (not a "fail" outcome), `executeWithRetry` treats it as a retryable error and retries up to `maxAttempts - 1 = 50` times (with default `default_max_retry=50`), with exponential backoff (up to 60s per retry). The pipeline hangs in "running..." state for potentially 30-50+ minutes with no visible output (unless `--verbose` is used, which shows `stage_retrying` events). This is inconsistent with the ENOENT case (non-existent cwd), where `spawn` does NOT throw synchronously — it fires an "error" event, which the `on("error", ...)` handler catches and **resolves** the Promise with a fail result, properly triggering a "fail" outcome without retry.
+- **Expected:** A FILE path as `--cwd` should fail immediately with a clear error message (e.g., `"spawn ENOTDIR: not a directory"`) after one attempt, not retry 51 times silently.
+- **Actual:** The tool node retries 51 times over many minutes (due to exponential backoff with `maxDelay=60s`). Without `--verbose`, the user sees `● work → running...` indefinitely.
+- **Reproduction:**
+  ```dot
+  digraph g {
+    start [shape=Mdiamond]
+    work [type=tool tool_command="pwd"]
+    end [shape=Msquare]
+    start -> work
+    work -> end
+  }
+  ```
+  Run: `attractor run test.dot --cwd /etc/hostname --logs ./logs`. The `work` node stays "running..." forever (use `timeout 60 attractor ...` to see the eventual fail).
+- **Root cause:** In `runShellCommand`, `spawn()` can throw synchronously (ENOTDIR) or emit an "error" event asynchronously (ENOENT). The synchronous throw escapes the `on("error", ...)` handler and propagates as a Promise rejection, which `executeWithRetry` interprets as a transient error. The ENOENT case works because the "error" event handler calls `resolve(...)` (not `reject`), producing a "fail" outcome that bypasses the retry logic.
+- **Fix:** Wrap the `spawn()` call in a `try/catch` inside `runShellCommand`. If spawn throws synchronously, call `resolve({ stdout: "", stderr: err.message, exitCode: 1, timedOut: false })` immediately, matching the behavior of the "error" event handler for ENOENT. This prevents the synchronous throw from reaching `executeWithRetry`.
+
+---
+
 ## BUG-014: Unconditional `loop_restart=true` edge causes infinite restart loop, eventually crashing with ENAMETOOLONG
 
 - **Status:** FIXED
