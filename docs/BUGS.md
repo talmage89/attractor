@@ -1,3 +1,25 @@
+## BUG-013: Subgraph class derivation skips nodes declared before `label =` statement
+
+- **Status:** OPEN
+- **Found during:** Testing / Subgraph Features (#30)
+- **File(s):** `src/parser/parser.ts`
+- **Description:** When a subgraph has a `label =` attribute, the parser derives a class name and adds it to all nodes inside the subgraph. However, the parser processes statements sequentially, so nodes declared **before** the `label =` statement are built before the class is pushed onto `subgraphClassStack`. As a result, those nodes receive an empty `className` and are NOT targeted by stylesheet class selectors (`.derived-class { ... }`) and do NOT derive a `thread_id` via class-based thread resolution.
+- **Expected:** Per spec Section 4 ("Add this class to every node inside the subgraph (append to existing `class` attribute if present)"), ALL nodes inside the subgraph should receive the derived class, regardless of where `label =` appears in the subgraph body.
+- **Actual:** Only nodes declared AFTER `label =` in the subgraph body get the class. Nodes declared before `label =` have `className=""` and are silently excluded from stylesheet class targeting and class-based thread_id resolution.
+- **Reproduction:** Create a DOT file with:
+  ```dot
+  model_stylesheet = ".highlight { llm_model: highlighted-model }"
+  subgraph cluster {
+    before_node [type=tool]
+    label = "highlight"
+    after_node [type=tool]
+  }
+  ```
+  Parse and inspect: `before_node.className=""`, `after_node.className="highlight"`. Only `after_node` gets `llm_model: highlighted-model` from the stylesheet. If these were codergen nodes, `before_node` would silently use the wrong model or fail to share a thread session.
+- **Fix:** In `parseSubgraph()`, scan the subgraph body for a `label =` token **before** parsing statements (two-pass approach), derive the class name upfront, push it onto `subgraphClassStack` before any `parseStatement()` calls, then restore on exit. This ensures all nodes inside the subgraph get the class regardless of label placement.
+
+---
+
 ## BUG-012: Resume fails silently when stored `nodeRetries` exceeds current `maxAttempts`
 
 - **Status:** FIXED
