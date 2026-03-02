@@ -264,6 +264,20 @@ function retryTargetExistsRule(graph: Graph): Diagnostic[] {
       });
     }
   }
+  if (graph.attributes.retryTarget && !graph.nodes.has(graph.attributes.retryTarget)) {
+    diags.push({
+      rule: "retry_target_exists",
+      severity: "warning",
+      message: `Graph retry_target '${graph.attributes.retryTarget}' does not exist`,
+    });
+  }
+  if (graph.attributes.fallbackRetryTarget && !graph.nodes.has(graph.attributes.fallbackRetryTarget)) {
+    diags.push({
+      rule: "retry_target_exists",
+      severity: "warning",
+      message: `Graph fallback_retry_target '${graph.attributes.fallbackRetryTarget}' does not exist`,
+    });
+  }
   return diags;
 }
 

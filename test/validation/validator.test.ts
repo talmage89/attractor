@@ -664,6 +664,57 @@ describe("validation", () => {
       expect(rule[0].severity).toBe("warning");
       expect(rule[0].nodeId).toBe("a");
     });
+
+    it("produces a warning diagnostic for a graph-level retry_target that references a nonexistent node", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      graph.attributes.retryTarget = "nonexistent";
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "retry_target_exists");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("Graph retry_target");
+      expect(rule[0].message).toContain("nonexistent");
+    });
+
+    it("produces a warning diagnostic for a graph-level fallback_retry_target that references a nonexistent node", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      graph.attributes.fallbackRetryTarget = "missing_node";
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "retry_target_exists");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("Graph fallback_retry_target");
+      expect(rule[0].message).toContain("missing_node");
+    });
+
+    it("does not flag graph-level retry_target when it references an existing node", () => {
+      const graph = makeGraph([
+        makeNode("s", { shape: "Mdiamond" }),
+        makeNode("a", { prompt: "Do A" }),
+        makeNode("e", { shape: "Msquare" }),
+      ], [
+        { from: "s", to: "a", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+        { from: "a", to: "e", label: "", condition: "", weight: 1, fidelity: "", threadId: "", loopRestart: false },
+      ]);
+      graph.attributes.retryTarget = "a";
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "retry_target_exists");
+      expect(rule).toHaveLength(0);
+    });
   });
 
   describe("validateOrThrow", () => {

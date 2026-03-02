@@ -18,7 +18,7 @@ This is the eighteenth code review pass of the Attractor TypeScript DAG pipeline
 
 - **Severity:** LOW
 - **Category:** Spec Compliance / Correctness
-- **Status:** OPEN
+- **Status:** RESOLVED — Extended `retryTargetExistsRule` to check `graph.attributes.retryTarget` and `graph.attributes.fallbackRetryTarget`; added 4 new test cases (3 invalid, 1 valid). 355 tests passing.
 - **File(s):** `src/validation/rules.ts:247-268`, `test/validation/validator.test.ts:637-667`
 - **Description:** The `retryTargetExistsRule` linting rule validates that per-node `retry_target` and `fallback_retry_target` attributes reference existing nodes. However, it does not validate the corresponding graph-level attributes (`graph.attributes.retryTarget`, `graph.attributes.fallbackRetryTarget`), which are equally important since `resolveRetryTarget()` consults them as fallback candidates:
 
