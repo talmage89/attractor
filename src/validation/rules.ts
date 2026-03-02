@@ -333,6 +333,21 @@ function invalidDefaultMaxRetryRule(graph: Graph): Diagnostic[] {
   return [];
 }
 
+function invalidEdgeWeightRule(graph: Graph): Diagnostic[] {
+  const diags: Diagnostic[] = [];
+  for (const edge of graph.edges) {
+    if (Number.isNaN(edge.weight)) {
+      diags.push({
+        rule: "invalid_edge_weight",
+        severity: "warning",
+        message: `Edge ${edge.from} -> ${edge.to} has an invalid weight value; using default (0)`,
+        edge: { from: edge.from, to: edge.to },
+      });
+    }
+  }
+  return diags;
+}
+
 function promptOnLlmNodesRule(graph: Graph): Diagnostic[] {
   const diags: Diagnostic[] = [];
   for (const node of graph.nodes.values()) {
@@ -367,4 +382,5 @@ export const BUILT_IN_RULES: LintRule[] = [
   nodeIdSafeRule,
   promptOnLlmNodesRule,
   invalidDefaultMaxRetryRule,
+  invalidEdgeWeightRule,
 ];

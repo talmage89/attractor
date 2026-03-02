@@ -205,6 +205,20 @@ digraph g {
 }
 `;
 
+// BUG-020: invalid edge weight string → parseInt returns NaN
+export const WITH_INVALID_EDGE_WEIGHT = `
+digraph g {
+  start [shape=Mdiamond]
+  path_a [type=tool]
+  path_b [type=tool]
+  end [shape=Msquare]
+  start -> path_a [weight="not_a_number"]
+  start -> path_b [weight=1]
+  path_a -> end
+  path_b -> end
+}
+`;
+
 // --- Invalid DOT for error testing ---
 
 export const INVALID_UNDIRECTED = `

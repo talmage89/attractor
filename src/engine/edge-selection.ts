@@ -68,11 +68,13 @@ export function selectEdge(
   return bestByWeightThenLexical(unconditional);
 }
 
-/** Return the edge with the highest weight, breaking ties by lexical order of edge.to */
+/** Return the edge with the highest weight, breaking ties by lexical order of edge.to.
+ * NaN weights (from invalid `weight=` attribute values) are treated as 0 (BUG-020). */
 function bestByWeightThenLexical(edges: Edge[]): Edge {
+  const w = (e: Edge): number => Number.isNaN(e.weight) ? 0 : e.weight;
   return edges.reduce((best, e) => {
-    if (e.weight > best.weight) return e;
-    if (e.weight === best.weight && e.to < best.to) return e;
+    if (w(e) > w(best)) return e;
+    if (w(e) === w(best) && e.to < best.to) return e;
     return best;
   });
 }

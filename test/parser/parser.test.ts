@@ -175,6 +175,20 @@ describe("parser", () => {
     });
   });
 
+  describe("invalid edge weight (BUG-020)", () => {
+    it("stores NaN when weight is a non-numeric string", () => {
+      const graph = parse(fixtures.WITH_INVALID_EDGE_WEIGHT);
+      const badEdge = graph.edges.find(e => e.from === "start" && e.to === "path_a");
+      expect(Number.isNaN(badEdge?.weight)).toBe(true);
+    });
+
+    it("correctly parses a valid integer weight on the same graph", () => {
+      const graph = parse(fixtures.WITH_INVALID_EDGE_WEIGHT);
+      const goodEdge = graph.edges.find(e => e.from === "start" && e.to === "path_b");
+      expect(goodEdge?.weight).toBe(1);
+    });
+  });
+
   describe("graph query helpers", () => {
     it("outgoingEdges returns correct edges", async () => {
       const { outgoingEdges } = await import("../../src/model/graph");

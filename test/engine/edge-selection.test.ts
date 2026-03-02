@@ -183,6 +183,52 @@ describe("selectEdge", () => {
     });
   });
 
+  describe("invalid weight (NaN) handling (BUG-020)", () => {
+    it("treats NaN weight as 0 — valid weight=1 beats invalid weight string", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          work [type=tool]
+          path_a [type=tool]
+          path_b [type=tool]
+          s -> work
+          work -> path_a [weight="not_a_number"]
+          work -> path_b [weight=1]
+          path_a -> e
+          path_b -> e
+        }
+      `);
+      const work = graph.nodes.get("work")!;
+      const outcome: Outcome = { status: "success" };
+      const edge = selectEdge(graph, work, outcome, new Context());
+      // weight=1 (path_b) must beat NaN-weight (treated as 0) on path_a
+      expect(edge?.to).toBe("path_b");
+    });
+
+    it("uses lexical tiebreak when both edges have NaN weight (treated as 0)", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          work [type=tool]
+          beta [type=tool]
+          alpha [type=tool]
+          s -> work
+          work -> beta  [weight="bad"]
+          work -> alpha [weight="also_bad"]
+          beta -> e
+          alpha -> e
+        }
+      `);
+      const work = graph.nodes.get("work")!;
+      const outcome: Outcome = { status: "success" };
+      const edge = selectEdge(graph, work, outcome, new Context());
+      // Both weights are NaN (treated as 0); lexical tiebreak → alpha wins
+      expect(edge?.to).toBe("alpha");
+    });
+  });
+
   describe("no outgoing edges", () => {
     it("returns null when no edges exist", () => {
       const graph = parse(`

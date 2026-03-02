@@ -819,6 +819,77 @@ describe("validation", () => {
     });
   });
 
+  describe("invalidEdgeWeightRule (BUG-020)", () => {
+    it("warns when an edge has a non-numeric weight string", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          a [type=tool]
+          b [type=tool]
+          s -> a [weight="not_a_number"]
+          s -> b [weight=1]
+          a -> e
+          b -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_edge_weight");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("s -> a");
+      expect(rule[0].edge).toEqual({ from: "s", to: "a" });
+    });
+
+    it("warns for each edge with an invalid weight (multiple)", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          a [type=tool]
+          b [type=tool]
+          s -> a [weight="bad"]
+          s -> b [weight="also_bad"]
+          a -> e
+          b -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_edge_weight");
+      expect(rule).toHaveLength(2);
+    });
+
+    it("does not warn when weight is a valid integer", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          a [type=tool]
+          s -> a [weight=5]
+          a -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_edge_weight");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not warn when weight is absent", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          a [type=tool]
+          s -> a
+          a -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_edge_weight");
+      expect(rule).toHaveLength(0);
+    });
+  });
+
   describe("valid pipelines pass cleanly", () => {
     it("three-node linear pipeline has no errors", () => {
       const graph = parse(`
