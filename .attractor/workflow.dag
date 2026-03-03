@@ -1,17 +1,22 @@
 digraph G {
   graph [goal="Implement feature per .attractor/spec.md"]
 
-  s [shape=Mdiamond]
-  e [shape=Msquare]
+  start [shape=Mdiamond]
+  exit  [shape=Msquare]
 
   setup     [shape=box, prompt="Read .attractor/prompts/setup.md and follow the instructions."]
+  plan      [shape=box, prompt="Read .attractor/prompts/plan.md and follow the instructions."]
+  audit     [shape=box, prompt="Read .attractor/prompts/audit.md and follow the instructions."]
   implement [shape=box, prompt="Read .attractor/prompts/implement.md and follow the instructions."]
   review    [shape=box, prompt="Read .attractor/prompts/review.md and follow the instructions."]
   test      [shape=box, prompt="Read .attractor/prompts/test.md and follow the instructions."]
   fix       [shape=box, prompt="Read .attractor/prompts/fix.md and follow the instructions."]
   wrapup    [shape=box, prompt="Read .attractor/prompts/wrapup.md and follow the instructions."]
 
-  s -> setup -> implement
+  start -> setup -> plan -> audit
+
+  audit -> implement [condition="context.audit_passed=true"]
+  audit -> plan      [condition="context.audit_passed!=true"]
 
   implement -> implement [condition="context.phase_complete!=true"]
   implement -> review    [condition="context.phase_complete=true"]
@@ -23,5 +28,5 @@ digraph G {
   test -> fix    [condition="context.tests_passed!=true"]
 
   fix -> test
-  wrapup -> e
+  wrapup -> exit
 }
