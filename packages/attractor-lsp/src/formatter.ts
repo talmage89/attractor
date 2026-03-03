@@ -280,7 +280,7 @@ function emitEdgeChain(e: EdgeChain, prefix: string): string {
 
 function emitDefaults(d: DefaultsStmt, prefix: string): string {
   const attrStr = emitAttrs(d.attrs);
-  return attrStr ? `${prefix}${d.target} ${attrStr}` : `${prefix}${d.target}`;
+  return `${prefix}${d.target} ${attrStr || "[]"}`;
 }
 
 function emitSubgraph(s: Subgraph, indent: number): string {

@@ -199,4 +199,31 @@ describe("format()", () => {
     const broken = `digraph G { @@@invalid }`;
     expect(format(makeDoc(broken))).toEqual([]);
   });
+
+  it("is idempotent for empty node defaults block", () => {
+    const input = `digraph G { node [] start [shape=Mdiamond] start->end end[shape=Msquare] }`;
+    const r1 = formatted(input);
+    const r2 = formatted(r1!);
+    expect(r1).not.toBeNull();
+    expect(r1).toBe(r2);
+    expect(r1).toContain("node []");
+  });
+
+  it("is idempotent for empty edge defaults block", () => {
+    const input = `digraph G { edge [] start [shape=Mdiamond] start->end end[shape=Msquare] }`;
+    const r1 = formatted(input);
+    const r2 = formatted(r1!);
+    expect(r1).not.toBeNull();
+    expect(r1).toBe(r2);
+    expect(r1).toContain("edge []");
+  });
+
+  it("is idempotent for empty graph defaults block (does not drop statement)", () => {
+    const input = `digraph G { graph [] start [shape=Mdiamond] start->end end[shape=Msquare] }`;
+    const r1 = formatted(input);
+    const r2 = formatted(r1!);
+    expect(r1).not.toBeNull();
+    expect(r1).toBe(r2);
+    expect(r1).toContain("graph []");
+  });
 });
