@@ -2,5 +2,3 @@ node_modules/
 dist/
 *.tsbuildinfo
 .attractor/workspace/
-.attractor/runs/
-!.attractor/runs/kickstart/
