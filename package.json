@@ -1,25 +1,9 @@
 {
-  "name": "attractor",
-  "version": "0.1.0",
-  "description": "DAG pipeline execution engine using Claude Code Agent SDK",
+  "private": true,
   "packageManager": "pnpm@10.28.2",
-  "type": "module",
-  "main": "dist/index.js",
-  "bin": {
-    "attractor": "dist/cli.js"
-  },
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
-  },
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.63"
-  },
-  "devDependencies": {
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0",
-    "@types/node": "^22.0.0"
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck"
   }
 }

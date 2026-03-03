@@ -6,7 +6,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  packages/attractor:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.63
