@@ -5,6 +5,7 @@ import type {
   GraphAttributes,
   GraphNode,
   Edge,
+  Span,
 } from "../model/graph.js";
 
 const DURATION_MS: Record<string, number> = {
@@ -87,6 +88,7 @@ function defaultEdge(from: string, to: string): Edge {
 class Parser {
   private tokens: Token[];
   private pos = 0;
+  private lastConsumed!: Token;
 
   // Defaults stack: each frame holds nodeDefaults and edgeDefaults
   private defaultsStack: { node: Map<string, string>; edge: Map<string, string> }[] = [
@@ -101,10 +103,12 @@ class Parser {
     attributes: defaultGraphAttributes(),
     nodes: new Map(),
     edges: [],
+    attributeSpans: new Map(),
   };
 
   constructor(source: string) {
     this.tokens = lex(source);
+    this.lastConsumed = this.tokens[0];
   }
 
   private peek(): Token {
@@ -112,7 +116,19 @@ class Parser {
   }
 
   private advance(): Token {
-    return this.tokens[this.pos++];
+    const t = this.tokens[this.pos++];
+    this.lastConsumed = t;
+    return t;
+  }
+
+  private spanFrom(startToken: Token): Span {
+    const end = this.lastConsumed;
+    return {
+      line: startToken.line,
+      column: startToken.column,
+      endLine: end.line,
+      endColumn: end.column + end.value.length,
+    };
   }
 
   private check(kind: TokenKind): boolean {
@@ -320,6 +336,8 @@ class Parser {
   }
 
   private parseIdentifierStatement(): void {
+    const startToken = this.peek();
+
     // Gather identifier chain separated by ARROWs.
     // Both bare identifiers and quoted strings are accepted as node IDs.
     const chain: string[] = [this.parseNodeId()];
@@ -342,9 +360,11 @@ class Parser {
         for (const [k, v] of this.parseAttrBlock()) attrs.set(k, v);
       }
       this.consumeOptionalSemicolon();
+      const span = this.spanFrom(startToken);
 
       for (let i = 0; i < chain.length - 1; i++) {
         const edge = this.buildEdge(chain[i], chain[i + 1], attrs);
+        edge.span = span;
         this.graph.edges.push(edge);
       }
       return;
@@ -360,6 +380,7 @@ class Parser {
       this.graph.attributes.raw.set(id, value);
       this.applyGraphAttributeKV(id, value);
       this.consumeOptionalSemicolon();
+      this.graph.attributeSpans!.set(id, this.spanFrom(startToken));
       return;
     }
 
@@ -369,8 +390,10 @@ class Parser {
       for (const [k, v] of this.parseAttrBlock()) attrs.set(k, v);
     }
     this.consumeOptionalSemicolon();
+    const span = this.spanFrom(startToken);
 
     const node = this.buildNode(id, attrs);
+    node.span = span;
     this.graph.nodes.set(id, node);
   }
 

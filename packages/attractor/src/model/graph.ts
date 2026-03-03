@@ -1,8 +1,16 @@
+export interface Span {
+  line: number;       // 1-indexed (parser convention)
+  column: number;     // 1-indexed
+  endLine: number;
+  endColumn: number;
+}
+
 export interface Graph {
   name: string;
   attributes: GraphAttributes;
   nodes: Map<string, GraphNode>;
   edges: Edge[];
+  attributeSpans?: Map<string, Span>; // key = attribute name, span = whole assignment
 }
 
 export interface GraphAttributes {
@@ -36,6 +44,7 @@ export interface GraphNode {
   autoStatus: boolean;
   allowPartial: boolean;
   raw: Map<string, string>;
+  span?: Span;
 }
 
 export interface Edge {
@@ -47,6 +56,7 @@ export interface Edge {
   fidelity: string;
   threadId: string;
   loopRestart: boolean;
+  span?: Span;
 }
 
 export function outgoingEdges(graph: Graph, nodeId: string): Edge[] {

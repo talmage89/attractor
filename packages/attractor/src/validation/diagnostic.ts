@@ -1,3 +1,5 @@
+import type { Span } from "../model/graph.js";
+
 export type Severity = "error" | "warning" | "info";
 
 export interface Diagnostic {
@@ -7,4 +9,5 @@ export interface Diagnostic {
   nodeId?: string;
   edge?: { from: string; to: string };
   fix?: string;
+  span?: Span;
 }

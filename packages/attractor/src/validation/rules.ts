@@ -62,6 +62,7 @@ function startNoIncomingRule(graph: Graph): Diagnostic[] {
         severity: "error",
         message: "Start node must not have incoming edges",
         nodeId: start.id,
+        span: start.span,
       },
     ];
   }
@@ -79,6 +80,7 @@ function exitNoOutgoingRule(graph: Graph): Diagnostic[] {
       severity: "error" as const,
       message: "Exit node must not have outgoing edges",
       nodeId: exit.id,
+      span: exit.span,
     }));
 }
 
@@ -95,6 +97,7 @@ function reachabilityRule(graph: Graph): Diagnostic[] {
         severity: "error",
         message: `Node '${node.id}' is unreachable from start`,
         nodeId: node.id,
+        span: node.span,
       });
     }
   }
@@ -110,6 +113,7 @@ function edgeTargetExistsRule(graph: Graph): Diagnostic[] {
         severity: "error",
         message: `Edge references unknown node '${edge.from}'`,
         edge: { from: edge.from, to: edge.to },
+        span: edge.span,
       });
     }
     if (!graph.nodes.has(edge.to)) {
@@ -118,6 +122,7 @@ function edgeTargetExistsRule(graph: Graph): Diagnostic[] {
         severity: "error",
         message: `Edge references unknown node '${edge.to}'`,
         edge: { from: edge.from, to: edge.to },
+        span: edge.span,
       });
     }
   }
@@ -136,6 +141,7 @@ function conditionSyntaxRule(graph: Graph): Diagnostic[] {
         severity: "error",
         message: `Invalid condition syntax: '${edge.condition}'`,
         edge: { from: edge.from, to: edge.to },
+        span: edge.span,
       });
     }
   }
@@ -197,6 +203,7 @@ function typeKnownRule(graph: Graph): Diagnostic[] {
         severity: "warning",
         message: `Unknown node type '${node.type}'`,
         nodeId: node.id,
+        span: node.span,
       });
     }
   }
@@ -221,6 +228,7 @@ function fidelityValidRule(graph: Graph): Diagnostic[] {
         severity: "warning",
         message: `Invalid fidelity mode '${node.fidelity}'`,
         nodeId: node.id,
+        span: node.span,
       });
     }
   }
@@ -231,6 +239,7 @@ function fidelityValidRule(graph: Graph): Diagnostic[] {
         severity: "warning",
         message: `Invalid fidelity mode '${edge.fidelity}' on edge ${edge.from} -> ${edge.to}`,
         edge: { from: edge.from, to: edge.to },
+        span: edge.span,
       });
     }
   }
@@ -253,6 +262,7 @@ function retryTargetExistsRule(graph: Graph): Diagnostic[] {
         severity: "warning",
         message: `Node '${node.id}' has retry_target '${node.retryTarget}' which does not exist`,
         nodeId: node.id,
+        span: node.span,
       });
     }
     if (node.fallbackRetryTarget && !graph.nodes.has(node.fallbackRetryTarget)) {
@@ -261,6 +271,7 @@ function retryTargetExistsRule(graph: Graph): Diagnostic[] {
         severity: "warning",
         message: `Node '${node.id}' has fallback_retry_target '${node.fallbackRetryTarget}' which does not exist`,
         nodeId: node.id,
+        span: node.span,
       });
     }
   }
@@ -293,6 +304,7 @@ function goalGateHasRetryRule(graph: Graph): Diagnostic[] {
           severity: "warning",
           message: `Goal gate node '${node.id}' has no retry target`,
           nodeId: node.id,
+          span: node.span,
         });
       }
     }
@@ -311,6 +323,7 @@ function nodeIdSafeRule(graph: Graph): Diagnostic[] {
         severity: "error",
         message: `Node id '${node.id}' contains path traversal characters ('/', '\\', or '..')`,
         nodeId: node.id,
+        span: node.span,
       });
     }
   }
@@ -342,6 +355,7 @@ function invalidEdgeWeightRule(graph: Graph): Diagnostic[] {
         severity: "warning",
         message: `Edge ${edge.from} -> ${edge.to} has an invalid weight value; using default (0)`,
         edge: { from: edge.from, to: edge.to },
+        span: edge.span,
       });
     }
   }
@@ -359,6 +373,7 @@ function promptOnLlmNodesRule(graph: Graph): Diagnostic[] {
         severity: "warning",
         message: `LLM node '${node.id}' has no prompt or label`,
         nodeId: node.id,
+        span: node.span,
       });
     }
   }
