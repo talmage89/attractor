@@ -31,7 +31,7 @@ This node tracks two values that control routing:
 - **`clean_sessions`** — How many consecutive clean sessions have occurred?
 
 Read `context.clean_sessions` to see the current count. Then:
-- If this session is clean: increment the count (e.g. `"0"` → `"1"`, `"1"` → `"2"`, `"2"` → `"3"`).
+- If this session is clean: increment the count (e.g. `"0"` → `"1"`, `"1"` → `"2"`, `"2"` → `"3"`). Cap the value at `"3"` — never write a number higher than 3.
 - If this session has ANY findings or failures: reset the count to `"0"`.
 
 The pipeline exits to wrapup only when `clean_test=true` AND `clean_sessions=3`. If the session is clean but the count hasn't reached 3, the pipeline loops back to test again. If the session is not clean, it routes to fix.
