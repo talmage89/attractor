@@ -28,8 +28,8 @@ You are a code review agent. Perform a thorough review of the implementation aga
 ## Status
 
 Set `review_passed` based on your findings:
-- `"true"` — No findings, or only LOW/trivial findings that don't affect correctness. Build, typecheck, and tests all pass.
-- `"false"` — Any CRITICAL, HIGH, or MEDIUM findings exist, or the codebase doesn't build/typecheck/test cleanly.
+- `"true"` — No findings, or ONLY trivial findings. Build, typecheck, and tests all pass.
+- `"false"` — Any non-trivial findings exist (CRITICAL, HIGH, MEDIUM, or LOW), or the codebase doesn't build/typecheck/test cleanly.
 
 In your `context_updates` (all values must be strings), include:
 - `review_passed`: `"true"` or `"false"`
