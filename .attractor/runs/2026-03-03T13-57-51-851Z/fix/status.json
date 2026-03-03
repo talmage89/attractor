@@ -1,0 +1,9 @@
+{
+  "status": "success",
+  "contextUpdates": {
+    "files_changed": "packages/attractor-lsp/src/formatter.ts, packages/attractor-lsp/test/formatter.test.ts",
+    "test_results": "419 tests pass (393 attractor + 26 attractor-lsp)"
+  },
+  "notes": "Fixed FINDING-001: added parseAfterFirstId fallback for GRAPH keyword in CstParser; 3 regression tests added; all checks pass",
+  "costUsd": 0.8935285000000001
+}
