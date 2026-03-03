@@ -18,9 +18,10 @@ You are the planning agent. Your job is to break the spec into implementation ph
      - Dependencies on prior phases (if any)
    - Aim for 5-15 minutes of agent work per phase. If a phase would take longer, split it.
 5. **Write the plan.** Create or update `.attractor/workspace/plan.md` with the full set of phases.
+6. **Commit and push** the updated plan.
 
 ## Status
 
-In your `context_updates`, include:
-- `total_phases`: the number of phases in your plan
-- `phases_from_spec`: `true` if you adopted phases from the spec, `false` if you created them
+In your `context_updates` (all values must be strings), include:
+- `total_phases`: the number of phases in your plan (e.g. `"7"`)
+- `phases_from_spec`: `"true"` if you adopted phases from the spec, `"false"` if you created them

@@ -16,13 +16,14 @@ You are the plan audit agent. Your job is to verify that the implementation plan
    - Reorder phases if dependencies are wrong.
    - Split phases that are too large, merge phases that are too small.
    - Remove or correct phases that contradict the spec.
+5. **Commit and push** if you made changes.
 
 ## Status
 
 Set `audit_passed` based on your assessment:
-- `true` — The plan fully covers the spec. Every requirement is accounted for. Phases are well-ordered and right-sized.
-- `false` — You found and fixed gaps. The plan needs another audit pass to verify your corrections.
+- `"true"` — The plan fully covers the spec. Every requirement is accounted for. Phases are well-ordered and right-sized.
+- `"false"` — You found and fixed gaps. The plan needs another audit pass to verify your corrections.
 
-In your `context_updates`, include:
-- `audit_passed`: `true` or `false`
-- `gaps_found`: number of gaps or issues found (as a string)
+In your `context_updates` (all values must be strings), include:
+- `audit_passed`: `"true"` or `"false"`
+- `gaps_found`: number of gaps or issues found (e.g. `"0"`)

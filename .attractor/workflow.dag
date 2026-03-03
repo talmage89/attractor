@@ -24,8 +24,8 @@ digraph G {
   review -> test      [condition="context.review_passed=true"]
   review -> implement [condition="context.review_passed!=true"]
 
-  test -> wrapup [condition="context.tests_passed=true"]
-  test -> fix    [condition="context.tests_passed!=true"]
+  test -> wrapup [condition="context.clean_sessions=3"]
+  test -> fix    [condition="context.clean_sessions!=3"]
 
   fix -> test
   wrapup -> exit
