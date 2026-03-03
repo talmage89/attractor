@@ -1,6 +1,8 @@
 export { run } from "./engine/runner.js";
 export type { RunConfig, RunResult } from "./engine/runner.js";
 export { parse } from "./parser/parser.js";
+export { lex } from "./parser/lexer.js";
+export type { Token, TokenKind } from "./parser/tokens.js";
 export { validate, validateOrThrow } from "./validation/validator.js";
 export type { Diagnostic, Severity } from "./validation/diagnostic.js";
 export type { LintRule } from "./validation/rules.js";
