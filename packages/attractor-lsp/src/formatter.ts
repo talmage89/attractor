@@ -170,7 +170,8 @@ class CstParser {
         const attrs = this.parseAttrBlocks();
         return { kind: "defaults", target: "graph", attrs };
       }
-      return null;
+      // "graph" used as an identifier (e.g., edge starting at node named "graph")
+      return this.parseAfterFirstId("graph");
     }
 
     if (t.kind === "SUBGRAPH") {

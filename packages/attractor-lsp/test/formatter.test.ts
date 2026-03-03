@@ -226,4 +226,30 @@ describe("format()", () => {
     expect(r1).toBe(r2);
     expect(r1).toContain("graph []");
   });
+
+  it("preserves edge starting with keyword 'graph' as node name (graph -> b)", () => {
+    // "graph" used as a node identifier in an edge statement
+    const input = `digraph G { start [shape=Mdiamond] graph -> b b [shape=Msquare] }`;
+    const result = formatted(input);
+    expect(result).not.toBeNull();
+    // The edge must be present in the output
+    expect(result).toContain("graph -> b");
+    // The node 'b' must appear exactly once
+    const bOccurrences = (result!.match(/\bb\b/g) ?? []).length;
+    expect(bOccurrences).toBe(2); // once in edge chain, once in node decl
+  });
+
+  it("preserves edge starting with keyword 'node' as node name (node -> b)", () => {
+    const input = `digraph G { start [shape=Mdiamond] node -> b b [shape=Msquare] }`;
+    const result = formatted(input);
+    expect(result).not.toBeNull();
+    expect(result).toContain("node -> b");
+  });
+
+  it("preserves edge starting with keyword 'edge' as node name (edge -> b)", () => {
+    const input = `digraph G { start [shape=Mdiamond] edge -> b b [shape=Msquare] }`;
+    const result = formatted(input);
+    expect(result).not.toBeNull();
+    expect(result).toContain("edge -> b");
+  });
 });
