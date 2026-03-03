@@ -1,4 +1,4 @@
-digraph G {
+digraph Sprinter {
   graph [goal="Implement feature per .attractor/spec.md"]
 
   start [shape=Mdiamond]
@@ -29,5 +29,6 @@ digraph G {
   test -> fix    [condition="context.clean_test!=true"]
 
   fix -> test
+
   wrapup -> exit
 }
