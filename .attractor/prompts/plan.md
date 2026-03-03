@@ -5,8 +5,9 @@ You are the planning agent. Your job is to break the spec into implementation ph
 ## Steps
 
 1. **Read the spec.** Read `.attractor/workspace/spec.md` thoroughly.
-2. **Check for existing phases.** If the spec already declares numbered phases or implementation steps, adopt them as-is — do not re-invent structure that the spec author already provided. Skip to step 4.
-3. **Break the spec into phases.** If the spec does not declare phases, create them:
+2. **Check for audit feedback.** If `.attractor/workspace/plan.md` already exists, read it along with any audit findings. The audit agent may have identified gaps, misordered phases, or spec requirements that aren't covered. Address all audit feedback before proceeding — this takes priority over creating a new plan from scratch.
+3. **Check for existing phases.** If the spec already declares numbered phases or implementation steps, adopt them as-is — do not re-invent structure that the spec author already provided. Skip to step 5.
+4. **Break the spec into phases.** If the spec does not declare phases, create them:
    - Each phase should be a concrete, testable chunk of work that one agent can complete in a light-to-moderate session.
    - Phases should build on each other — later phases can depend on earlier ones, but each phase should be self-contained enough to implement and verify independently.
    - Number them sequentially: Phase 1, Phase 2, etc.
@@ -16,7 +17,7 @@ You are the planning agent. Your job is to break the spec into implementation ph
      - Acceptance criteria (what "done" looks like)
      - Dependencies on prior phases (if any)
    - Aim for 5-15 minutes of agent work per phase. If a phase would take longer, split it.
-4. **Write the plan.** Create `.attractor/workspace/plan.md` with the full set of phases.
+5. **Write the plan.** Create or update `.attractor/workspace/plan.md` with the full set of phases.
 
 ## Status
 
