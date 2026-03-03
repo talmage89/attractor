@@ -25,17 +25,23 @@ You are a QA testing agent. Your job is to use the application as a real user wo
 
 ## Completion gate
 
-This node tracks consecutive clean sessions. The pipeline exits testing only after 3 sessions in a row with zero findings.
+This node tracks two values that control routing:
 
-- Read `context.clean_sessions` to see how many consecutive clean sessions have occurred so far.
-- If you found zero bugs AND the codebase is fully green (build + typecheck + tests), increment the counter.
-- If you found any bugs or failures, reset the counter to `"0"`.
+- **`clean_test`** — Was THIS session clean? `"true"` if zero findings and codebase is fully green, `"false"` otherwise.
+- **`clean_sessions`** — How many consecutive clean sessions have occurred?
+
+Read `context.clean_sessions` to see the current count. Then:
+- If this session is clean: increment the count (e.g. `"0"` → `"1"`, `"1"` → `"2"`, `"2"` → `"3"`).
+- If this session has ANY findings or failures: reset the count to `"0"`.
+
+The pipeline exits to wrapup only when `clean_test=true` AND `clean_sessions=3`. If the session is clean but the count hasn't reached 3, the pipeline loops back to test again. If the session is not clean, it routes to fix.
 
 ## Status
 
 In your `context_updates` (all values must be strings), include:
-- `clean_sessions`: the updated count as a string (e.g. `"1"`, `"2"`, `"3"`, or `"0"` if bugs found)
-- `bugs_found`: number of bugs found this session (as a string, e.g. `"0"`)
+- `clean_test`: `"true"` or `"false"`
+- `clean_sessions`: the updated count as a string (`"0"`, `"1"`, `"2"`, or `"3"`)
+- `bugs_found`: number of bugs found this session (e.g. `"0"`)
 
 ## Guidelines
 
