@@ -1,5 +1,5 @@
-digraph Sprinter {
-  graph [goal="Implement feature per .attractor/spec.md"]
+digraph Sprint {
+  graph [goal="Implement changes per .attractor/spec.md"]
 
   start [shape=Mdiamond]
   exit  [shape=Msquare]
