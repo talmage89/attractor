@@ -1,7 +1,7 @@
 import { parse, validate } from "attractor";
 import type { Diagnostic as AttractorDiag } from "attractor";
-import type { Diagnostic as LspDiag } from "vscode-languageserver/node.js";
-import { DiagnosticSeverity } from "vscode-languageserver/node.js";
+import type { Diagnostic as LspDiag } from "vscode-languageserver/node";
+import { DiagnosticSeverity } from "vscode-languageserver/node";
 import type { TextDocument } from "vscode-languageserver-textdocument";
 
 const SEVERITY_MAP = {

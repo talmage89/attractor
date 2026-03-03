@@ -4,7 +4,7 @@ import {
   TextDocuments,
   ProposedFeatures,
   TextDocumentSyncKind,
-} from "vscode-languageserver/node.js";
+} from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { computeDiagnostics } from "./diagnostics.js";
 import { format } from "./formatter.js";

@@ -198,6 +198,7 @@ class Parser {
         this.applyGraphAttributes(attrs);
       }
       this.consumeOptionalSemicolon();
+      this.graph.attributeSpans!.set("graph", this.spanFrom(t));
       return;
     }
 
@@ -210,6 +211,7 @@ class Parser {
         }
       }
       this.consumeOptionalSemicolon();
+      this.graph.attributeSpans!.set("node", this.spanFrom(t));
       return;
     }
 
@@ -222,6 +224,7 @@ class Parser {
         }
       }
       this.consumeOptionalSemicolon();
+      this.graph.attributeSpans!.set("edge", this.spanFrom(t));
       return;
     }
 

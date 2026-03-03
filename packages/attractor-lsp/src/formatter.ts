@@ -1,4 +1,4 @@
-import type { TextEdit } from "vscode-languageserver/node.js";
+import type { TextEdit } from "vscode-languageserver/node";
 import type { TextDocument } from "vscode-languageserver-textdocument";
 import { lex } from "attractor";
 import type { Token } from "attractor";

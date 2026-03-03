@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { DiagnosticSeverity } from "vscode-languageserver/node.js";
+import { DiagnosticSeverity } from "vscode-languageserver/node";
 import { computeDiagnostics } from "../src/diagnostics.js";
 
 function makeDoc(text: string): TextDocument {
