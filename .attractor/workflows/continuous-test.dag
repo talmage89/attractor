@@ -1,0 +1,27 @@
+digraph ContinuousTest {
+  graph [goal = "Test the application continuously and fix any bugs found"]
+
+  start [shape = "Mdiamond"]
+  exit [shape = "Msquare"]
+  setup [shape = "box", prompt = "Read .attractor/prompts/continuous-test/setup.md and follow the instructions."]
+  test_fanout [shape = "component", max_parallel = "5"]
+  test_a [shape = "box", prompt = "Read .attractor/prompts/continuous-test/test.md and follow the instructions."]
+  test_b [shape = "box", prompt = "Read .attractor/prompts/continuous-test/test.md and follow the instructions."]
+  test_c [shape = "box", prompt = "Read .attractor/prompts/continuous-test/test.md and follow the instructions."]
+  test_d [shape = "box", prompt = "Read .attractor/prompts/continuous-test/test.md and follow the instructions."]
+  test_e [shape = "box", prompt = "Read .attractor/prompts/continuous-test/test.md and follow the instructions."]
+  test_merge [shape = "tripleoctagon"]
+  fix [shape = "box", prompt = "Read .attractor/prompts/continuous-test/fix.md and follow the instructions."]
+  wrapup [shape = "box", prompt = "Read .attractor/prompts/continuous-test/wrapup.md and follow the instructions."]
+
+  start -> setup -> test_fanout
+  test_fanout -> test_a -> test_merge
+  test_fanout -> test_b -> test_merge
+  test_fanout -> test_c -> test_merge
+  test_fanout -> test_d -> test_merge
+  test_fanout -> test_e -> test_merge
+  test_merge -> wrapup [condition = "context.parallel.fail_count=0"]
+  test_merge -> fix [condition = "context.parallel.fail_count!=0"]
+  fix -> test_fanout
+  wrapup -> exit
+}
