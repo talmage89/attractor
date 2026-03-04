@@ -28,16 +28,11 @@ digraph Sprint {
   ci_check -> implement [condition = "context.ci_passed!=true"]
   review -> test_fanout [condition = "context.review_passed=true"]
   review -> implement [condition = "context.review_passed!=true"]
-  test_fanout -> test_a
-  test_fanout -> test_b
-  test_fanout -> test_c
-  test_fanout -> test_d
-  test_fanout -> test_e
-  test_a -> test_merge
-  test_b -> test_merge
-  test_c -> test_merge
-  test_d -> test_merge
-  test_e -> test_merge
+  test_fanout -> test_a -> test_merge
+  test_fanout -> test_b -> test_merge
+  test_fanout -> test_c -> test_merge
+  test_fanout -> test_d -> test_merge
+  test_fanout -> test_e -> test_merge
   test_merge -> wrapup [condition = "context.parallel.fail_count=0"]
   test_merge -> fix [condition = "context.parallel.fail_count!=0"]
   fix -> test_fanout
