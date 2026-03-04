@@ -12,18 +12,19 @@ You are one of 5 test agents running concurrently. To avoid conflicts:
 
 ## Steps
 
-1. **Understand the application.** Read the README and explore the source code to understand what the application does, its features, and expected behaviors.
-2. **Validate the codebase.** Run all three checks first:
+1. **Read your test plan.** Check `.attractor/workspace/test-plan.md` for your assigned focus areas (look for the section matching your node name). Use this to guide your testing — hit your primary focus first, then your secondary focus, then freestyle.
+2. **Understand the application.** Read the README and explore the source code to understand what the application does, its features, and expected behaviors.
+3. **Validate the codebase.** Run all three checks first:
    - `pnpm run build` — must compile cleanly
    - `pnpm run typecheck` — must produce zero errors
    - `pnpm test` — all tests must pass
    If anything fails, this counts as a finding.
-3. **Exercise the application.** Test broadly and creatively:
+4. **Exercise the application.** Test broadly and creatively:
    - **Happy paths:** Run core functionality as described in the README and existing tests.
    - **Edge cases:** Try boundary conditions, empty states, malformed input, missing files, concurrent usage.
    - **Regression hunting:** Review recent commits (`git log --oneline -20`) and focus testing on recently changed areas.
    - Verify error messages are clear and helpful.
-4. **Write per-agent findings.** Write your results to `.attractor/workspace/findings-{node_name}.md` (e.g. `findings-test_a.md`):
+5. **Write per-agent findings.** Write your results to `.attractor/workspace/findings-{node_name}.md` (e.g. `findings-test_a.md`):
    - For each bug, describe: what you did, what you expected, what happened instead.
    - Include reproduction steps specific enough that another agent can reproduce the issue.
    - If no bugs found, write "No bugs found. Application behaves as expected."

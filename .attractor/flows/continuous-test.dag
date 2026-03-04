@@ -4,6 +4,7 @@ digraph ContinuousTest {
   start [shape = "Mdiamond"]
   exit [shape = "Msquare"]
   setup [shape = "box", prompt = "Read .attractor/prompts/continuous-test/setup.md and follow the instructions."]
+  plan [shape = "box", prompt = "Read .attractor/prompts/continuous-test/plan.md and follow the instructions.", llm_model = "opus"]
   test_fanout [shape = "component", max_parallel = "5"]
   test_a [shape = "box", prompt = "Read .attractor/prompts/continuous-test/test.md and follow the instructions."]
   test_b [shape = "box", prompt = "Read .attractor/prompts/continuous-test/test.md and follow the instructions."]
@@ -12,9 +13,10 @@ digraph ContinuousTest {
   test_e [shape = "box", prompt = "Read .attractor/prompts/continuous-test/test.md and follow the instructions."]
   test_merge [shape = "tripleoctagon"]
   fix [shape = "box", prompt = "Read .attractor/prompts/continuous-test/fix.md and follow the instructions."]
+  review [shape = "box", prompt = "Read .attractor/prompts/continuous-test/review.md and follow the instructions.", llm_model = "claude-opus-4-6"]
   wrapup [shape = "box", prompt = "Read .attractor/prompts/continuous-test/wrapup.md and follow the instructions."]
 
-  start -> setup -> test_fanout
+  start -> setup -> plan -> test_fanout
   test_fanout -> test_a -> test_merge
   test_fanout -> test_b -> test_merge
   test_fanout -> test_c -> test_merge
@@ -22,6 +24,8 @@ digraph ContinuousTest {
   test_fanout -> test_e -> test_merge
   test_merge -> wrapup [condition = "context.parallel.fail_count=0"]
   test_merge -> fix [condition = "context.parallel.fail_count!=0"]
-  fix -> test_fanout
+  fix -> review
+  review -> plan [condition = "context.review_passed=true"]
+  review -> fix [condition = "context.review_passed!=true"]
   wrapup -> exit
 }
