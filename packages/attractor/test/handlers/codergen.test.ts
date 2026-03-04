@@ -512,6 +512,27 @@ describe("CodergenHandler", () => {
     expect(outcome.status).toBe("fail");
   });
 
+  it("resolves model alias 'opus' to full model ID when calling runCC", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt="Do work", llm_model="opus"]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult());
+
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, config as any);
+
+    const [, options] = mockRunCC.mock.calls[0];
+    expect(options.model).toBe("claude-opus-4-6");
+  });
+
   it("includes outgoing edge labels in status instruction", async () => {
     const graph = parse(`
       digraph G {

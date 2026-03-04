@@ -9,6 +9,7 @@ import type { SessionManager } from "../backend/session-manager.js";
 import { resolveFidelity, resolveThreadId } from "../model/fidelity.js";
 import { generatePreamble } from "../backend/preamble.js";
 import { runCC } from "../backend/cc-backend.js";
+import { resolveModel } from "../model/models.js";
 
 export function parseEffort(value: string): "low" | "medium" | "high" {
   if (value === "low" || value === "medium" || value === "high") return value;
@@ -197,7 +198,7 @@ export class CodergenHandler implements Handler {
       permissionMode: config.ccPermissionMode,
     };
 
-    if (node.llmModel) ccOptions.model = node.llmModel;
+    if (node.llmModel) ccOptions.model = resolveModel(node.llmModel);
     if (node.reasoningEffort) ccOptions.reasoningEffort = parseEffort(node.reasoningEffort);
     if (node.timeout !== null && node.timeout !== undefined) ccOptions.timeout = node.timeout;
     if (resumeSessionId) ccOptions.resume = resumeSessionId;

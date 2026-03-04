@@ -24,3 +24,5 @@ export { WaitForHumanHandler } from "./handlers/wait-human.js";
 export { ConditionalHandler } from "./handlers/conditional.js";
 export { SessionManager } from "./backend/session-manager.js";
 export { applyTransforms } from "./engine/transforms.js";
+export { Models, resolveModel } from "./model/models.js";
+export type { ModelAlias } from "./model/models.js";

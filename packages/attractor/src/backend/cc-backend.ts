@@ -1,4 +1,5 @@
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { Models } from "../model/models.js";
 
 export interface CCBackendOptions {
   cwd: string;
@@ -51,7 +52,7 @@ export async function runCC(
       allowDangerouslySkipPermissions,
     };
 
-    queryOptions.model = options.model ?? "claude-sonnet-4-6";
+    queryOptions.model = options.model ?? Models.SONNET;
     queryOptions.maxTurns = options.maxTurns ?? 200;
     if (options.reasoningEffort !== undefined) queryOptions.effort = options.reasoningEffort;
     if (options.sessionId !== undefined) queryOptions.sessionId = options.sessionId;

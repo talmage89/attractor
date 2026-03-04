@@ -14,6 +14,7 @@ The spec declares 4 changes with an explicit implementation order. Adopted as-is
 - Modify `packages/attractor/src/backend/cc-backend.ts` — replace hardcoded `"claude-sonnet-4-6"` with `Models.SONNET`
 - Modify `packages/attractor/src/index.ts` — export `Models`, `resolveModel`, `ModelAlias`
 - Create `packages/attractor/test/model/models.test.ts` — unit tests for `resolveModel` and `Models`
+- Modify `packages/attractor/test/handlers/codergen.test.ts` — add integration test: set `node.llmModel = "opus"`, verify `runCC` receives `"claude-opus-4-6"`
 
 **Acceptance criteria**:
 - `resolveModel("opus")` → `"claude-opus-4-6"`, case-insensitive
@@ -33,6 +34,7 @@ The spec declares 4 changes with an explicit implementation order. Adopted as-is
 **Files to modify**:
 - `packages/attractor/src/conditions/parser.ts` — extend `Clause.operator` type, ordered operator search
 - `packages/attractor/src/conditions/evaluator.ts` — numeric comparison with NaN guards
+- Check `packages/attractor/src/validation/rules.ts` — verify condition syntax validation rule accepts new operators (update if needed)
 - Existing condition test files — add parser and evaluator test cases
 
 **Acceptance criteria**:
