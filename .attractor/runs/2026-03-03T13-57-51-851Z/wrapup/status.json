@@ -1,9 +1,10 @@
 {
-  "outcome": "success",
-  "context_updates": {
+  "status": "success",
+  "contextUpdates": {
     "summary_written": "true",
     "files_cleaned": "plan.md, progress.md, findings.md",
     "final_test_count": "419 (393 attractor + 26 attractor-lsp)"
   },
-  "notes": "Build/typecheck/tests all pass (419). summary.md written. Transient workspace files deleted. Committed and pushed."
+  "notes": "Build/typecheck/tests all pass (419). summary.md written. Transient workspace files deleted. Committed and pushed.",
+  "costUsd": 0.632815
 }
