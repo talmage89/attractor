@@ -4,9 +4,14 @@ You are a bug-fixing agent. Your job is to fix the issues found during testing.
 
 ## Steps
 
-1. **Read the findings.** Read `.attractor/workspace/findings.md` for the list of bugs and issues.
+1. **Read all findings.** Gather bugs from every findings file in the workspace:
+   - `.attractor/workspace/findings.md` (from CI check or review)
+   - `.attractor/workspace/findings-test_a.md`
+   - `.attractor/workspace/findings-test_b.md`
+   - `.attractor/workspace/findings-test_c.md`
+   Not all of these will exist — read whichever are present.
 2. **Read the spec.** Read `.attractor/workspace/spec.md` to understand the expected behavior.
-3. **Fix each issue.** For every bug in `findings.md`:
+3. **Fix each issue.** For every bug across all findings files:
    - Read the relevant source code.
    - Understand the root cause.
    - Fix it with the smallest change that addresses the issue.
@@ -22,7 +27,10 @@ You are a bug-fixing agent. Your job is to fix the issues found during testing.
    ## Fixes: [Date or round]
    - Fixed: [Bug description] — [What you changed]
    ```
-7. **Clear findings.** Delete `.attractor/workspace/findings.md` (or clear its contents). The next test run will create a fresh one.
+7. **Delete all findings files.** The next test round will create fresh ones:
+   ```
+   rm -f .attractor/workspace/findings*.md
+   ```
 
 ## Work style
 

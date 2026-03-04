@@ -1,6 +1,6 @@
 # Wrapup
 
-You are the wrapup agent. The feature is complete — implementation passed review and 3 consecutive clean test sessions. Your job is to produce a final deliverable and clean up.
+You are the wrapup agent. The feature is complete — implementation passed review and all 3 parallel test agents found zero bugs. Your job is to produce a final deliverable and clean up.
 
 ## Steps
 
@@ -17,9 +17,20 @@ You are the wrapup agent. The feature is complete — implementation passed revi
    - Files created and modified
    - How to use the new feature
    - Any known limitations or future work
-4. **Clean up workspace.** Delete the transient communication files:
+4. **Clean up scratch files.** Remove any test artifacts left behind by parallel test agents:
+   ```
+   find packages/ -name "test-*.mjs" -delete
+   find packages/ -name "test_a-*" -delete
+   find packages/ -name "test_b-*" -delete
+   find packages/ -name "test_c-*" -delete
+   ```
+5. **Clean up findings.** Delete any remaining findings files:
+   ```
+   rm -f .attractor/workspace/findings*.md
+   ```
+6. **Check for untracked artifacts.** Run `git status` and inspect for any untracked pipeline artifacts (scratch files, temp outputs). Remove them.
+7. **Clean up workspace.** Delete the transient communication files:
    - `.attractor/workspace/plan.md`
    - `.attractor/workspace/progress.md`
-   - `.attractor/workspace/findings.md` (if it exists)
    - Keep `.attractor/workspace/spec.md` and `.attractor/workspace/summary.md`
-5. **Commit and push** all final changes.
+8. **Commit and push** all final changes.
