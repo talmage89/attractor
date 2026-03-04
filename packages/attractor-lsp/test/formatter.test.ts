@@ -21,7 +21,7 @@ describe("format()", () => {
       [
         `digraph G {`,
         `  start [shape = "Mdiamond"]`,
-        `  end [shape = "Msquare"]`,
+        `  end   [shape = "Msquare"]`,
         ``,
         `  start -> end`,
         `}`,
@@ -38,7 +38,7 @@ describe("format()", () => {
         `  goal = "Refactor"`,
         ``,
         `  start [shape = "Mdiamond"]`,
-        `  end [shape = "Msquare"]`,
+        `  end   [shape = "Msquare"]`,
         ``,
         `  start -> end`,
         `}`,
@@ -55,7 +55,7 @@ describe("format()", () => {
         `  node [shape = "box"]`,
         ``,
         `  start [shape = "Mdiamond"]`,
-        `  end [shape = "Msquare"]`,
+        `  end   [shape = "Msquare"]`,
         ``,
         `  start -> end`,
         `}`,
@@ -72,7 +72,7 @@ describe("format()", () => {
         `  edge [weight = "1"]`,
         ``,
         `  start [shape = "Mdiamond"]`,
-        `  end [shape = "Msquare"]`,
+        `  end   [shape = "Msquare"]`,
         ``,
         `  start -> end`,
         `}`,
@@ -125,7 +125,7 @@ describe("format()", () => {
       [
         `digraph G {`,
         `  start [shape = "Mdiamond"]`,
-        `  done [shape = "Msquare"]`,
+        `  done  [shape = "Msquare"]`,
         ``,
         `  start -> done`,
         ``,
@@ -169,7 +169,7 @@ describe("format()", () => {
       [
         `digraph G {`,
         `  start [shape = "Mdiamond"]`,
-        `  end [shape = "Msquare"]`,
+        `  end   [shape = "Msquare"]`,
         ``,
         `  start -> end`,
         `}`,
@@ -181,7 +181,7 @@ describe("format()", () => {
     const alreadyFormatted = [
       `digraph G {`,
       `  start [shape = "Mdiamond"]`,
-      `  end [shape = "Msquare"]`,
+      `  end   [shape = "Msquare"]`,
       ``,
       `  start -> end`,
       `}`,
@@ -251,6 +251,108 @@ describe("format()", () => {
     const result = formatted(input);
     expect(result).not.toBeNull();
     expect(result).toContain("edge -> b");
+  });
+
+  // ── Alignment tests (Phase 3) ────────────────────────────────────────────────
+
+  it("aligns node IDs within an alignment block", () => {
+    const input = [
+      `digraph G {`,
+      `  s [shape=Mdiamond]`,
+      `  long_node [shape=box, prompt="Work"]`,
+      `  e [shape=Msquare]`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    // All three nodes in same block (no blank lines between them); maxIdLen = 9 ("long_node")
+    expect(result).toContain(`  s         [shape = "Mdiamond"]`);
+    expect(result).toContain(`  long_node [shape = "box",`);
+    expect(result).toContain(`  e         [shape = "Msquare"]`);
+  });
+
+  it("aligns = signs within node attr blocks by position", () => {
+    const input = [
+      `digraph G {`,
+      `  a [shape=box, prompt="Do work"]`,
+      `  b [llm_model=claude, shape=circle]`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    // sorted order: shape(1), prompt(4), llm_model(12)
+    // maxKeyLen[0]=5 (both "shape"); maxKeyLen[1]=max("prompt"=6,"llm_model"=9)=9
+    // "prompt".padEnd(9) = "prompt   " → prompt    = "Do work"
+    expect(result).toContain(`shape = "box", prompt    = "Do work"`);
+    expect(result).toContain(`shape = "circle", llm_model = "claude"`);
+  });
+
+  it("aligns edge -> arrows within an alignment block", () => {
+    const input = [
+      `digraph G {`,
+      `  src -> dst`,
+      `  long_src -> dst`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    // maxNodeLen[0] = max(3("src"), 8("long_src")) = 8
+    expect(result).toContain(`  src      -> dst`);
+    expect(result).toContain(`  long_src -> dst`);
+  });
+
+  it("aligns [ bracket for edges with attrs in same block", () => {
+    const input = [
+      `digraph G {`,
+      `  a -> b [weight=1]`,
+      `  long_a -> b [condition=success]`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    // maxNodeLen[0]=6("long_a"), maxNodeLen[1]=1("b")
+    // chains: "a      -> b" (11), "long_a -> b" (11) — same width
+    // Both have attrs, maxChainWidth = 11
+    expect(result).toContain(`  a      -> b [weight    = "1"]`);
+    expect(result).toContain(`  long_a -> b [condition = "success"]`);
+  });
+
+  it("aligns graph attributes = signs", () => {
+    const input = [
+      `digraph G {`,
+      `  goal = "Build"`,
+      `  default_fidelity = "compact"`,
+      `  s [shape=Mdiamond]`,
+      `  e [shape=Msquare]`,
+      `  s -> e`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    // maxKeyLen = max("goal"=4, "default_fidelity"=16) = 16
+    expect(result).toContain(`  goal             = "Build"`);
+    expect(result).toContain(`  default_fidelity = "compact"`);
+  });
+
+  it("does not align across blank-line boundaries (separate alignment blocks)", () => {
+    const input = [
+      `digraph G {`,
+      `  short_id [shape=box]`,
+      ``,
+      `  very_long_identifier [shape=circle]`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    // blank line between them → separate alignment blocks → no cross-block padding
+    expect(result).toContain(`  short_id [shape = "box"]`);
+    expect(result).toContain(`  very_long_identifier [shape = "circle"]`);
+  });
+
+  it("is idempotent with aligned nodes", () => {
+    const input = `digraph G { s [shape=Mdiamond] long_node [shape=box, goal_gate=true] e [shape=Msquare] s -> e }`;
+    const result = formatted(input);
+    expect(result).not.toBeNull();
+    // Aligned output must itself be idempotent
+    expect(formatted(result!)).toBe(result);
+    // Alignment must be present: short IDs padded to "long_node" length (9)
+    expect(result).toContain(`  s         [shape = "Mdiamond"]`);
+    expect(result).toContain(`  long_node [shape = "box"`);
+    expect(result).toContain(`  e         [shape = "Msquare"]`);
   });
 
   // ── Blank-line preservation tests (Phase 2) ─────────────────────────────────

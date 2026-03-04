@@ -151,7 +151,9 @@ class CstParser {
     const startLine = this.peek().line;
     const stmt = this.parseStatementCore();
     if (stmt === null) return null;
-    return { ...stmt, startLine, endLine: this.lastLine };
+    stmt.startLine = startLine;
+    stmt.endLine = this.lastLine;
+    return stmt;
   }
 
   private parseStatementCore(): CstStmt | null {
@@ -161,7 +163,7 @@ class CstParser {
       this.advance();
       if (this.check("LBRACKET")) {
         const attrs = this.parseAttrBlocks();
-        return { kind: "defaults", target: "node", attrs };
+        return { kind: "defaults", target: "node", attrs, startLine: 0, endLine: 0 };
       }
       // "node" used as an identifier (e.g., edge starting at node named "node")
       return this.parseAfterFirstId("node");
@@ -171,7 +173,7 @@ class CstParser {
       this.advance();
       if (this.check("LBRACKET")) {
         const attrs = this.parseAttrBlocks();
-        return { kind: "defaults", target: "edge", attrs };
+        return { kind: "defaults", target: "edge", attrs, startLine: 0, endLine: 0 };
       }
       return this.parseAfterFirstId("edge");
     }
@@ -180,7 +182,7 @@ class CstParser {
       this.advance();
       if (this.check("LBRACKET")) {
         const attrs = this.parseAttrBlocks();
-        return { kind: "defaults", target: "graph", attrs };
+        return { kind: "defaults", target: "graph", attrs, startLine: 0, endLine: 0 };
       }
       // "graph" used as an identifier (e.g., edge starting at node named "graph")
       return this.parseAfterFirstId("graph");
@@ -214,7 +216,7 @@ class CstParser {
     if (this.check("EQUALS")) {
       this.advance(); // =
       const value = this.parseValue();
-      return { kind: "graph_attr", key: firstId, value };
+      return { kind: "graph_attr", key: firstId, value, startLine: 0, endLine: 0 };
     }
 
     // Edge chain: id -> id -> ...
@@ -225,12 +227,12 @@ class CstParser {
         ids.push(this.advance().value);
       }
       const attrs = this.check("LBRACKET") ? this.parseAttrBlocks() : [];
-      return { kind: "edge", ids, attrs };
+      return { kind: "edge", ids, attrs, startLine: 0, endLine: 0 };
     }
 
     // Node declaration: id [attrs...]
     const attrs = this.check("LBRACKET") ? this.parseAttrBlocks() : [];
-    return { kind: "node", id: firstId, attrs };
+    return { kind: "node", id: firstId, attrs, startLine: 0, endLine: 0 };
   }
 
   private parseSubgraph(): Subgraph {
@@ -243,7 +245,7 @@ class CstParser {
     this.eat("LBRACE");
     const stmts = this.parseBody();
     this.eat("RBRACE");
-    return { kind: "subgraph", name, stmts };
+    return { kind: "subgraph", name, stmts, startLine: 0, endLine: 0 };
   }
 
   private parseAttrBlocks(): AttrPair[] {
@@ -271,38 +273,7 @@ class CstParser {
   }
 }
 
-// ─── Emitter ──────────────────────────────────────────────────────────────────
-
-function emitAttrs(attrs: AttrPair[]): string {
-  if (attrs.length === 0) return "";
-  const sorted = sortAttrs(attrs);
-  const parts = sorted.map((a) => `${a.key} = ${quoteValue(a.value)}`);
-  return `[${parts.join(", ")}]`;
-}
-
-function emitNodeDecl(n: NodeDecl, prefix: string): string {
-  const attrStr = emitAttrs(n.attrs);
-  return attrStr ? `${prefix}${emitId(n.id)} ${attrStr}` : `${prefix}${emitId(n.id)}`;
-}
-
-function emitEdgeChain(e: EdgeChain, prefix: string): string {
-  const chain = e.ids.map(emitId).join(" -> ");
-  const attrStr = emitAttrs(e.attrs);
-  return attrStr ? `${prefix}${chain} ${attrStr}` : `${prefix}${chain}`;
-}
-
-function emitDefaults(d: DefaultsStmt, prefix: string): string {
-  const attrStr = emitAttrs(d.attrs);
-  return `${prefix}${d.target} ${attrStr || "[]"}`;
-}
-
-function emitSubgraph(s: Subgraph, indent: number): string {
-  const prefix = "  ".repeat(indent);
-  const header = s.name ? `${prefix}subgraph ${emitId(s.name)} {` : `${prefix}subgraph {`;
-  const body = emitBody(s.stmts, indent + 1);
-  if (!body) return `${header}\n${prefix}}`;
-  return `${header}\n${body}\n${prefix}}`;
-}
+// ─── Emitter helpers ──────────────────────────────────────────────────────────
 
 /**
  * Returns true if `a` and `b` are directly adjacent in `allStmts` (no other
@@ -314,6 +285,118 @@ function hadBlankLineBetween(allStmts: CstStmt[], a: CstStmt, b: CstStmt): boole
   const bi = allStmts.indexOf(b);
   if (bi !== ai + 1) return false; // not adjacent in source
   return b.startLine - a.endLine >= 2;
+}
+
+/**
+ * Split `items` into alignment blocks. A new block starts whenever two
+ * consecutive items had a blank line between them in the original source.
+ */
+function splitBlocks<T extends CstStmt>(allStmts: CstStmt[], items: T[]): T[][] {
+  if (items.length === 0) return [];
+  const blocks: T[][] = [[items[0]]];
+  for (let i = 1; i < items.length; i++) {
+    if (hadBlankLineBetween(allStmts, items[i - 1], items[i])) {
+      blocks.push([]);
+    }
+    blocks[blocks.length - 1].push(items[i]);
+  }
+  return blocks;
+}
+
+// ─── Block-level aligned emitters ────────────────────────────────────────────
+
+/** Emit a block of graph-attribute statements, aligning the `=` signs. */
+function emitGraphAttrBlock(block: GraphAttr[], prefix: string): string {
+  const maxKeyLen = Math.max(...block.map((a) => a.key.length));
+  return block
+    .map((a) => `${prefix}${a.key.padEnd(maxKeyLen)} = ${quoteValue(a.value)}`)
+    .join("\n");
+}
+
+/** Emit a block of defaults statements, aligning the `[` bracket. */
+function emitDefaultsBlock(block: DefaultsStmt[], prefix: string): string {
+  const maxTargetLen = Math.max(...block.map((d) => d.target.length));
+  return block
+    .map((d) => {
+      const target = d.target.padEnd(maxTargetLen);
+      const sorted = sortAttrs(d.attrs);
+      const attrStr =
+        sorted.length === 0
+          ? "[]"
+          : `[${sorted.map((a) => `${a.key} = ${quoteValue(a.value)}`).join(", ")}]`;
+      return `${prefix}${target} ${attrStr}`;
+    })
+    .join("\n");
+}
+
+/** Emit a block of node declarations, aligning IDs and `=` signs within attrs. */
+function emitNodeBlock(block: NodeDecl[], prefix: string): string {
+  const maxIdLen = Math.max(...block.map((n) => emitId(n.id).length));
+  const maxKeyLenByPos: number[] = [];
+  for (const n of block) {
+    sortAttrs(n.attrs).forEach((attr, i) => {
+      maxKeyLenByPos[i] = Math.max(maxKeyLenByPos[i] ?? 0, attr.key.length);
+    });
+  }
+  return block
+    .map((n) => {
+      const sorted = sortAttrs(n.attrs);
+      if (sorted.length === 0) return `${prefix}${emitId(n.id)}`;
+      const id = emitId(n.id).padEnd(maxIdLen);
+      const parts = sorted.map(
+        (attr, i) => `${attr.key.padEnd(maxKeyLenByPos[i])} = ${quoteValue(attr.value)}`,
+      );
+      return `${prefix}${id} [${parts.join(", ")}]`;
+    })
+    .join("\n");
+}
+
+/** Emit a block of edge chains, aligning `->` arrows, `[` brackets, and `=` signs. */
+function emitEdgeBlock(block: EdgeChain[], prefix: string): string {
+  // Compute max node-ID length at each arrow column.
+  const maxNodeLen: number[] = [];
+  for (const e of block) {
+    e.ids.forEach((id, c) => {
+      maxNodeLen[c] = Math.max(maxNodeLen[c] ?? 0, emitId(id).length);
+    });
+  }
+
+  // Build a padded chain string (every node at column c padded to maxNodeLen[c]),
+  // then trim trailing spaces so bare edges look clean.
+  function buildChain(e: EdgeChain): string {
+    return e.ids.map((id, c) => emitId(id).padEnd(maxNodeLen[c])).join(" -> ").trimEnd();
+  }
+
+  // Max total padded-chain width (for `[` bracket alignment).
+  const maxChainWidth = Math.max(...block.map((e) => buildChain(e).length));
+
+  // Compute max key length per attribute position (for `=` alignment).
+  const maxKeyLenByPos: number[] = [];
+  for (const e of block) {
+    sortAttrs(e.attrs).forEach((attr, i) => {
+      maxKeyLenByPos[i] = Math.max(maxKeyLenByPos[i] ?? 0, attr.key.length);
+    });
+  }
+
+  return block
+    .map((e) => {
+      const chain = buildChain(e);
+      const sorted = sortAttrs(e.attrs);
+      if (sorted.length === 0) return `${prefix}${chain}`;
+      const parts = sorted.map(
+        (attr, i) => `${attr.key.padEnd(maxKeyLenByPos[i])} = ${quoteValue(attr.value)}`,
+      );
+      return `${prefix}${chain.padEnd(maxChainWidth)} [${parts.join(", ")}]`;
+    })
+    .join("\n");
+}
+
+function emitSubgraph(s: Subgraph, indent: number): string {
+  const prefix = "  ".repeat(indent);
+  const header = s.name ? `${prefix}subgraph ${emitId(s.name)} {` : `${prefix}subgraph {`;
+  const body = emitBody(s.stmts, indent + 1);
+  if (!body) return `${header}\n${prefix}}`;
+  return `${header}\n${body}\n${prefix}}`;
 }
 
 function emitBody(stmts: CstStmt[], indent: number): string {
@@ -333,13 +416,19 @@ function emitBody(stmts: CstStmt[], indent: number): string {
   const edges = stmts.filter((s): s is EdgeChain => s.kind === "edge");
   const subgraphs = stmts.filter((s): s is Subgraph => s.kind === "subgraph");
 
-  function joinSection<T extends CstStmt>(items: T[], emitOne: (s: T) => string): string {
+  /** Emit all items in a section, splitting at blank lines into alignment blocks. */
+  function joinAligned<T extends CstStmt>(items: T[], emitBlock: (b: T[]) => string): string {
+    return splitBlocks(stmts, items).map(emitBlock).join("\n\n");
+  }
+
+  /** Emit subgraphs using blank-line detection but no cross-subgraph alignment. */
+  function joinSubgraphs(items: Subgraph[]): string {
     const parts: string[] = [];
     for (let i = 0; i < items.length; i++) {
       if (i > 0) {
         parts.push(hadBlankLineBetween(stmts, items[i - 1], items[i]) ? "\n\n" : "\n");
       }
-      parts.push(emitOne(items[i]));
+      parts.push(emitSubgraph(items[i], indent));
     }
     return parts.join("");
   }
@@ -347,31 +436,25 @@ function emitBody(stmts: CstStmt[], indent: number): string {
   const sections: string[] = [];
 
   if (graphAttrs.length > 0) {
-    sections.push(joinSection(graphAttrs, (a) => `${prefix}${a.key} = ${quoteValue(a.value)}`));
+    sections.push(joinAligned(graphAttrs, (b) => emitGraphAttrBlock(b, prefix)));
   }
-
   if (graphDefaults.length > 0) {
-    sections.push(joinSection(graphDefaults, (d) => emitDefaults(d, prefix)));
+    sections.push(joinAligned(graphDefaults, (b) => emitDefaultsBlock(b, prefix)));
   }
-
   if (nodeDefaults.length > 0) {
-    sections.push(joinSection(nodeDefaults, (d) => emitDefaults(d, prefix)));
+    sections.push(joinAligned(nodeDefaults, (b) => emitDefaultsBlock(b, prefix)));
   }
-
   if (edgeDefaults.length > 0) {
-    sections.push(joinSection(edgeDefaults, (d) => emitDefaults(d, prefix)));
+    sections.push(joinAligned(edgeDefaults, (b) => emitDefaultsBlock(b, prefix)));
   }
-
   if (nodes.length > 0) {
-    sections.push(joinSection(nodes, (n) => emitNodeDecl(n, prefix)));
+    sections.push(joinAligned(nodes, (b) => emitNodeBlock(b, prefix)));
   }
-
   if (edges.length > 0) {
-    sections.push(joinSection(edges, (e) => emitEdgeChain(e, prefix)));
+    sections.push(joinAligned(edges, (b) => emitEdgeBlock(b, prefix)));
   }
-
   if (subgraphs.length > 0) {
-    sections.push(joinSection(subgraphs, (s) => emitSubgraph(s, indent)));
+    sections.push(joinSubgraphs(subgraphs));
   }
 
   return sections.join("\n\n");
