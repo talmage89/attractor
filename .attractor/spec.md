@@ -2,419 +2,131 @@
 
 ## Changes
 
-### 1. User-facing documentation: `.dag` file terminology
-
-**Goal**: All user-facing documentation refers to pipeline definition files as
-`.dag` files, not `.dot` files. Internal source code (parser module names,
-comments referencing DOT syntax) is unchanged.
-
-**File**: `README.md`
-
-Changes:
-- Line 5: "Define pipelines as DOT graphs" → "Define pipelines as `.dag` graphs"
-- Line 9: "Pipelines are directed graphs written in a subset of the DOT
-  language" → "Pipelines are directed graphs written in `.dag` files, a subset
-  of the DOT language"
-- Lines 42–49: All CLI examples change from `pipeline.dot` to `pipeline.dag`
-- Line 45: "Validate a DOT file" → "Validate a `.dag` file"
-- Line 195: `pipeline.dot` → `pipeline.dag` in the `--resume` example
-- Line 211: "DOT lexer and parser" → remains unchanged (internal reference)
-
-No other files need changes. The CLI itself is extension-agnostic (it reads any
-file path the user provides), so no runtime changes are needed.
-
----
-
-### 2. Result visibility: append to response.md instead of overwriting
+### 1. Parallel flow visibility in default CLI output
 
 **Package**: `attractor`
-**File**: `packages/attractor/src/handlers/codergen.ts`
+**File**: `packages/attractor/src/cli.ts`
 
-**Current behavior**: Line 215 unconditionally overwrites
-`<logsRoot>/<nodeId>/response.md` with the latest CC response via
-`fs.writeFile`. When a node re-executes (e.g., `implement` loops back), only
-the last response survives.
+**Current behavior**: `parallel_started`, `parallel_branch_completed`, and `parallel_completed` events fall through to the generic `[kind]` handler in `formatEvent`. They are also excluded from default (non-verbose) output.
 
-**New behavior**: Append to `response.md` instead of overwriting. Each
-execution appends a section with a header separator so individual responses
-remain distinguishable.
+**New behavior**: Add formatting cases in `formatEvent()` for the three parallel event kinds:
 
-**Format of each appended section**:
+- `parallel_started`: `[ts] ⊞ nodeId → parallel (N branches)`
+- `parallel_branch_completed`: `[ts]   ├ branchNodeId → status (branch N/total)`
+- `parallel_completed`: `[ts] ⊞ nodeId → done (N succeeded, M failed)`
 
-```markdown
----
-
-## <nodeId> — <ISO timestamp>
-
-<response text>
-```
-
-The `---` horizontal rule serves as a visual separator. The heading includes the
-node ID and an ISO 8601 timestamp for traceability. The first entry in the file
-omits the leading `---` (since there's nothing above it to separate from).
-
-**Implementation**: In `CodergenHandler.execute()`, replace:
-
-```typescript
-await fs.writeFile(path.join(stageDir, "response.md"), ccResult.text, "utf-8");
-```
-
-with:
-
-```typescript
-const responsePath = path.join(stageDir, "response.md");
-const timestamp = new Date().toISOString();
-const header = `## ${node.id} — ${timestamp}`;
-let existing = "";
-try {
-  existing = await fs.readFile(responsePath, "utf-8");
-} catch {
-  // file doesn't exist yet
-}
-const separator = existing ? "\n\n---\n\n" : "";
-await fs.writeFile(responsePath, existing + separator + header + "\n\n" + ccResult.text, "utf-8");
-```
-
-Apply the same append pattern to `prompt.md` (line 191), so the prompt that
-produced each response is also preserved.
-
-`status.json` continues to be overwritten (it represents current state, not
-history — the checkpoint already captures the latest outcome).
-
-#### Tests
-
-Add a test in `packages/attractor/test/handlers/codergen.test.ts` (or the
-existing handler test file) that:
-
-1. Executes a codergen node twice against the same stage directory
-2. Reads `response.md` and verifies it contains both responses separated by
-   `---`
-3. Verifies each section has the correct header format
-4. Verifies `prompt.md` also contains both prompts
+Add all three event kinds to the default output filter in `onEvent` (lines 123–137) so they display without `--verbose`.
 
 ---
 
-### 3. Better comparators in condition expressions
+### 2. Dynamic runtime parallelization
 
 **Package**: `attractor`
 **Files**:
-- `packages/attractor/src/conditions/parser.ts`
-- `packages/attractor/src/conditions/evaluator.ts`
+- `packages/attractor/src/handlers/parallel.ts`
+- `packages/attractor/src/validation/rules.ts`
 
-#### 4a. Parser changes
-
-**Current state**: `Clause.operator` is `"=" | "!="`. The parser checks for
-`!=` first (indexOf), then `=`.
-
-**New operator type**:
-
-```typescript
-export interface Clause {
-  key: string;
-  operator: "=" | "!=" | ">" | ">=" | "<" | "<=";
-  value: string;
-}
-```
-
-**Parsing order**: Check for multi-character operators first (longest match),
-then single-character:
-
-1. `>=`
-2. `<=`
-3. `!=`
-4. `>`
-5. `<`
-6. `=`
-
-This prevents `>=` from being parsed as `>` + `=`.
-
-**Implementation**: Replace the current `neqIdx`/`eqIdx` chain with an ordered
-search through operator tokens:
-
-```typescript
-const OPS: { token: string; operator: Clause["operator"] }[] = [
-  { token: ">=", operator: ">=" },
-  { token: "<=", operator: "<=" },
-  { token: "!=", operator: "!=" },
-  { token: ">", operator: ">" },
-  { token: "<", operator: "<" },
-  { token: "=", operator: "=" },
-];
-
-for (const { token, operator } of OPS) {
-  const idx = clause.indexOf(token);
-  if (idx !== -1) {
-    const key = clause.slice(0, idx).trim();
-    const value = clause.slice(idx + token.length).trim();
-    if (key === "") throw new Error(`Invalid condition clause: "${clause}"`);
-    clauses.push({ key, operator, value });
-    break;
-  }
-}
-```
-
-The bare-key fallback (no operator found) remains: `{ key, operator: "!=", value: "" }`.
-
-#### 4b. Evaluator changes
-
-**Current state**: `evaluateCondition()` does string comparison for `=` and `!=`.
-
-**New behavior**: For `>`, `>=`, `<`, `<=`, both the resolved value and the
-clause value are parsed as floats. If either side is `NaN`, the clause evaluates
-to `false`.
-
-```typescript
-for (const clause of clauses) {
-  const resolved = resolveKey(clause.key, outcome, context).trim();
-  switch (clause.operator) {
-    case "=":
-      if (resolved !== clause.value) return false;
-      break;
-    case "!=":
-      if (resolved === clause.value) return false;
-      break;
-    case ">":
-    case ">=":
-    case "<":
-    case "<=": {
-      const a = parseFloat(resolved);
-      const b = parseFloat(clause.value);
-      if (Number.isNaN(a) || Number.isNaN(b)) return false;
-      if (clause.operator === ">" && !(a > b)) return false;
-      if (clause.operator === ">=" && !(a >= b)) return false;
-      if (clause.operator === "<" && !(a < b)) return false;
-      if (clause.operator === "<=" && !(a <= b)) return false;
-      break;
-    }
-  }
-}
-```
-
-#### 4c. Validation
-
-The existing condition syntax validation rule (if any) should be updated to
-accept the new operators. The lexer does not need changes — conditions are
-string values inside quoted attributes and parsed by the condition parser, not
-the DOT lexer.
-
-#### 4d. Documentation
-
-Update `README.md` line 120 from:
-
-```
-Conditions support `=`, `!=`, and `&&`:
-```
-
-to:
-
-```
-Conditions support `=`, `!=`, `>`, `>=`, `<`, `<=`, and `&&`:
-```
-
-Add an example:
+#### DAG syntax
 
 ```dot
-test -> wrapup [condition="context.clean_sessions>=3"]
-test -> test   [condition="context.clean_sessions<3"]
+test_fanout [shape = "component", foreach_key = "test_files", item_key = "test_file", max_parallel = "5"]
+run_test [shape = "box", prompt = "Run test: $item"]
+test_merge [shape = "tripleoctagon"]
+
+test_fanout -> run_test -> test_merge
 ```
 
-#### Tests
+- `foreach_key` — context key containing a JSON array. Its presence on a `component` node triggers dynamic mode instead of static fanout.
+- `item_key` — context key set per-branch to the current array element (default: `"item"`).
 
-Add test cases in the existing condition parser/evaluator test files:
+#### Changes to `parallel.ts`
 
-**Parser tests**:
-- `context.x>5` → `{ key: "context.x", operator: ">", value: "5" }`
-- `context.x>=5` → `{ key: "context.x", operator: ">=", value: "5" }`
-- `context.x<5` → `{ key: "context.x", operator: "<", value: "5" }`
-- `context.x<=5` → `{ key: "context.x", operator: "<=", value: "5" }`
-- `context.x>=5 && context.y<10` → two clauses with correct operators
-- Bare key fallback still works
+Add `executeDynamic()` method to `ParallelHandler`:
 
-**Evaluator tests**:
-- `context.count>2` with count=3 → true
-- `context.count>2` with count=2 → false
-- `context.count>=2` with count=2 → true
-- `context.count<5` with count=3 → true
-- `context.count<=3` with count=3 → true
-- `context.count>2` with count="abc" → false (NaN guard)
-- `context.count>2` with count="" → false (NaN guard)
-- Mixed: `context.x>=1 && context.y!=bad` → both clauses evaluated
+1. Read `foreach_key` from `node.raw`. If present, enter dynamic mode.
+2. Require exactly one outgoing edge (the template branch). Error if more.
+3. Collect the template sub-chain: walk from the edge target forward, collecting node IDs until hitting a fan-in or terminal node.
+4. Read the list: `JSON.parse(context.get(foreachKey))` — must be an array.
+5. For each item, clone template nodes with suffixed IDs (`{nodeId}__dyn_{i}`), clone internal edges, add edge from parallel node to cloned chain start, add edge from cloned chain end to fan-in. Insert all into `graph.nodes` and `graph.edges`.
+6. For each branch, clone context, set `item_key` to the current item value.
+7. Execute all cloned branches using the existing worker pool pattern.
+8. Aggregate results identically to static mode.
+9. After execution, remove synthetic nodes/edges from the graph (clean up).
+
+#### Changes to `rules.ts`
+
+Add a validation rule: if a node has `foreach_key` in `raw`, warn if it doesn't have shape `component`, warn if it has != 1 outgoing edge.
+
+#### Prompt interpolation
+
+Set `context.{item_key}` on each branch's cloned context so the LLM sees the value naturally. The codergen handler already receives the full context.
 
 ---
 
-### 4. Centralized model registry with alias resolution
+### 3. Formatter: preserve up to one blank line of user whitespace
 
-**Package**: `attractor`
+**Package**: `attractor-lsp`
+**File**: `packages/attractor-lsp/src/formatter.ts`
 
-#### 4a. New file: `packages/attractor/src/model/models.ts`
+**Current behavior**: The formatter strips all user whitespace and re-sections statements by kind, joining sections with exactly one blank line and items within sections with no blank lines.
 
-Create a centralized model registry that maps short aliases to full model IDs.
-The registry is a plain object with version-free keys (`OPUS`, `SONNET`,
-`HAIKU`) so that updating to a new model release requires changing a single
-file.
+**New behavior**: Continue reordering by kind (graph attrs → graph defaults → node defaults → edge defaults → nodes → edges → subgraphs). But within each section, if two consecutive statements had a blank line between them in the original source, preserve one blank line between them in the output. Multiple consecutive blank lines collapse to one.
 
-```typescript
-export const Models = {
-  OPUS: "claude-opus-4-6",
-  SONNET: "claude-sonnet-4-6",
-  HAIKU: "claude-haiku-4-5-20251001",
-} as const;
+#### Changes to CST types
 
-export type ModelAlias = keyof typeof Models;
+Add `startLine: number` and `endLine: number` to each `CstStmt` variant. The `CstParser` records `this.peek().line` at statement start and the line of the last consumed token at statement end.
 
-const ALIAS_MAP: Record<string, string> = {
-  opus: Models.OPUS,
-  sonnet: Models.SONNET,
-  haiku: Models.HAIKU,
-};
+#### Changes to `emitBody`
 
-/**
- * Resolve a model string. If it matches a known alias (case-insensitive),
- * return the full model ID. Otherwise return the input unchanged (it may
- * be a full model ID or a third-party model name).
- */
-export function resolveModel(input: string): string {
-  return ALIAS_MAP[input.toLowerCase()] ?? input;
-}
-```
+Within each section, when joining consecutive statements, check if `stmt[i+1].startLine - stmt[i].endLine >= 2`. If so, emit `"\n\n"` (one blank line); otherwise emit `"\n"`.
 
-Design notes:
-- `Models` is a `const` object, not an enum, for simpler consumption (no
-  reverse mapping noise, works as values in plain JS).
-- `resolveModel` is case-insensitive: `"Sonnet"`, `"SONNET"`, `"sonnet"` all
-  resolve to the same ID.
-- Unknown strings pass through unchanged — this preserves support for
-  third-party model names (e.g., `"gpt-5"`) and full Claude model IDs written
-  explicitly.
+---
 
-#### 4b. Export from `packages/attractor/src/index.ts`
+### 4. Formatter: vertical alignment
 
-Add to the public API exports:
+**Package**: `attractor-lsp`
+**File**: `packages/attractor-lsp/src/formatter.ts`
 
-```typescript
-export { Models, resolveModel } from "./model/models.js";
-export type { ModelAlias } from "./model/models.js";
-```
+**Scope**: Alignment applies only within "alignment blocks" — runs of consecutive same-section statements with no blank line between them (using the boundaries from change 3).
 
-This allows programmatic consumers to use `Models.OPUS` instead of hardcoding
-strings.
+#### Node declaration alignment
 
-#### 4c. Resolution point: `CodergenHandler`
+For a block of `NodeDecl` statements:
+- Compute `maxIdLen` = max `emitId(n.id).length` across the block.
+- Pad each ID to `maxIdLen` before appending ` [attrs]`.
+- Within `[attrs]`, align `=` signs: compute `maxKeyLen` per attribute position across the block, pad keys accordingly.
 
-**File**: `packages/attractor/src/handlers/codergen.ts`
+#### Edge chain alignment
 
-Apply alias resolution in `CodergenHandler.execute()` where `node.llmModel` is
-passed to `ccOptions`. Change:
+For a block of `EdgeChain` statements:
+- For each arrow column `c` (0-indexed), compute `maxNodeLen[c]` = max length of the node ID at position `c` across all edges that have at least `c+1` nodes.
+- Pad each node ID at position `c` to `maxNodeLen[c]`, aligning all `->` arrows.
+- After the chain, align the `[` bracket: compute max total chain width across the block, pad to that before `[attrs]`.
+- Within attrs, align `=` signs like nodes.
 
-```typescript
-if (node.llmModel) ccOptions.model = node.llmModel;
-```
+#### Graph attribute alignment
 
-to:
+For a block of `GraphAttr` statements:
+- Compute `maxKeyLen`, pad keys so `=` signs align.
 
-```typescript
-if (node.llmModel) ccOptions.model = resolveModel(node.llmModel);
-```
+#### Defaults alignment
 
-Import `resolveModel` from `../model/models.js`.
-
-This is the single resolution point — aliases are resolved at the boundary
-between the pipeline model and the CC backend. The parser and stylesheet
-applicator continue to store the raw user-provided string. This means:
-- `node.llmModel` retains the alias (useful for serialization, debugging)
-- Resolution happens once, right before invocation
-- The formatter round-trips the original value, not the resolved one
-
-#### 4d. Replace hardcoded default in `cc-backend.ts`
-
-**File**: `packages/attractor/src/backend/cc-backend.ts`
-
-Change line 54:
-
-```typescript
-queryOptions.model = options.model ?? "claude-sonnet-4-6";
-```
-
-to:
-
-```typescript
-queryOptions.model = options.model ?? Models.SONNET;
-```
-
-Import `Models` from `../model/models.js`. This ensures the default model is
-defined in one place.
-
-#### 4e. Documentation
-
-Update `README.md` to document alias support. Add a subsection under
-"Pipeline Features" or within the "Node Types" table context:
-
-```markdown
-### Model Aliases
-
-Use short aliases instead of full model IDs in `llm_model` attributes:
-
-| Alias | Resolves to |
-|---|---|
-| `sonnet` | `claude-sonnet-4-6` |
-| `opus` | `claude-opus-4-6` |
-| `haiku` | `claude-haiku-4-5-20251001` |
-
-Aliases are case-insensitive. Full model IDs and third-party model names
-continue to work as before.
-
-```dot
-plan [shape=box, prompt="Create a plan", llm_model="opus"]
-```
-
-Or via model stylesheet:
-
-```dot
-graph [model_stylesheet="* { llm_model: sonnet } .critical { llm_model: opus }"]
-```
-```
-
-#### Tests
-
-Add tests in a new file `packages/attractor/test/model/models.test.ts`:
-
-**`resolveModel` tests**:
-- `resolveModel("sonnet")` → `"claude-sonnet-4-6"`
-- `resolveModel("opus")` → `"claude-opus-4-6"`
-- `resolveModel("haiku")` → `"claude-haiku-4-5-20251001"`
-- `resolveModel("Sonnet")` → `"claude-sonnet-4-6"` (case-insensitive)
-- `resolveModel("OPUS")` → `"claude-opus-4-6"` (case-insensitive)
-- `resolveModel("claude-sonnet-4-6")` → `"claude-sonnet-4-6"` (passthrough)
-- `resolveModel("gpt-5")` → `"gpt-5"` (unknown passthrough)
-- `resolveModel("")` → `""` (empty passthrough)
-
-**`Models` constant tests**:
-- `Models.OPUS` is a string
-- `Models.SONNET` is a string
-- `Models.HAIKU` is a string
-- All values contain `"claude-"` prefix (sanity check)
-
-**Integration test** (in existing codergen handler tests):
-- Set `node.llmModel = "opus"` and verify `runCC` receives
-  `"claude-opus-4-6"` as the model option
+For a block of `DefaultsStmt` statements:
+- Align the `[` bracket across the block.
 
 ---
 
 ## Implementation order
 
-1. **Change 4** (model registry) — new file + two call-site changes, no
-   cross-package dependencies; do first so other changes can reference
-   `Models` if needed
-2. **Change 3** (comparators) — standalone, conditions package only
-3. **Change 2** (response.md append) — standalone, codergen handler only
-4. **Change 1** (README terminology) — documentation only, do last (can
-   incorporate README changes from changes 3, 4 at the same time)
+1. Change 1 (parallel visibility) — small, self-contained CLI change
+2. Change 3 (formatter whitespace) — prerequisite for change 4
+3. Change 4 (formatter alignment) — depends on blank-line block boundaries from change 3
+4. Change 2 (dynamic parallel) — largest change, independent of 1/3/4
 
-## Out of scope
+## Verification
 
-- Runtime enforcement of `.dag` file extension
-- Renaming internal parser modules from "DOT" to "DAG"
-- Writing a `summary.md` at pipeline exit (deferred)
-- Attempt-numbered subdirectories for response files
-- Model validation (warning on unrecognized model strings) — may add later
-- Provider-specific alias resolution (e.g., OpenAI model aliases)
+1. **Parallel visibility**: Run a flow with parallel branches, confirm events appear in default output
+2. **Formatter whitespace**: Format a `.dag` with intentional blank lines within node/edge sections, verify preserved (max 1)
+3. **Formatter alignment**: Format `sprint.dag`, verify node IDs align `[` brackets, edge chains align `->` arrows
+4. **Dynamic parallel**: Write a test `.dag` with `foreach_key`, verify branches spawn per array item
+5. **Existing tests**: `pnpm test` in both packages, no regressions
