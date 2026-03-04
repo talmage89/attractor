@@ -2,11 +2,11 @@
 
 A TypeScript DAG pipeline execution engine that orchestrates multi-step AI coding workflows using the [Claude Code Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk). Based on [StrongDM's Attractor NLSpec](https://github.com/strongdm/attractor).
 
-Define pipelines as DOT graphs, and Attractor handles the rest: parsing, validation, execution, branching, retries, checkpointing, and human-in-the-loop interaction.
+Define pipelines as `.dag` graphs, and Attractor handles the rest: parsing, validation, execution, branching, retries, checkpointing, and human-in-the-loop interaction.
 
 ## How It Works
 
-Pipelines are directed graphs written in a subset of the [DOT language](https://graphviz.org/doc/info/lang.html). Each node represents a stage — an AI coding task, a shell command, a decision point, or a prompt for human input. Edges define transitions between stages, optionally guarded by conditions.
+Pipelines are directed graphs written in `.dag` files, a subset of the [DOT language](https://graphviz.org/doc/info/lang.html). Each node represents a stage — an AI coding task, a shell command, a decision point, or a prompt for human input. Edges define transitions between stages, optionally guarded by conditions.
 
 ```dot
 digraph G {
@@ -40,13 +40,13 @@ This makes the `attractor` command available globally.
 
 ```bash
 # Execute a pipeline
-attractor run pipeline.dot
+attractor run pipeline.dag
 
-# Validate a DOT file without executing
-attractor validate pipeline.dot
+# Validate a .dag file without executing
+attractor validate pipeline.dag
 
 # Generate an SVG visualization (requires Graphviz)
-attractor visualize pipeline.dot > pipeline.svg
+attractor visualize pipeline.dag > pipeline.svg
 ```
 
 #### Options for `run`
@@ -117,10 +117,12 @@ a -> b [condition="outcome.status=success"]
 a -> c [condition="outcome.status=fail"]
 ```
 
-Conditions support `=`, `!=`, and `&&`:
+Conditions support `=`, `!=`, `>`, `>=`, `<`, `<=`, and `&&`:
 
 ```dot
 a -> b [condition="outcome.status=success && context.coverage!=low"]
+test -> wrapup [condition="context.clean_sessions>=3"]
+test -> test   [condition="context.clean_sessions<3"]
 ```
 
 ### Retry Policies
@@ -186,12 +188,34 @@ Control how much context is passed to Claude Code sessions:
 - **`summary`** — Summarized prior outcomes
 - **`full`** — Reuse the same CC session across nodes sharing a `thread_id`, preserving full conversation history
 
+### Model Aliases
+
+Use short aliases instead of full model IDs in `llm_model` attributes:
+
+| Alias | Resolves to |
+|---|---|
+| `sonnet` | `claude-sonnet-4-6` |
+| `opus` | `claude-opus-4-6` |
+| `haiku` | `claude-haiku-4-5-20251001` |
+
+Aliases are case-insensitive. Full model IDs and third-party model names continue to work as before.
+
+```dot
+plan [shape=box, prompt="Create a plan", llm_model="opus"]
+```
+
+Or via model stylesheet:
+
+```dot
+graph [model_stylesheet="* { llm_model: sonnet } .critical { llm_model: opus }"]
+```
+
 ### Checkpoints and Resume
 
 Execution state is saved to `checkpoint.json` after each node completes. If a run crashes, resume it:
 
 ```bash
-attractor run pipeline.dot --resume .attractor/runs/2026-03-02T10-30-00-000Z/checkpoint.json
+attractor run pipeline.dag --resume .attractor/runs/2026-03-02T10-30-00-000Z/checkpoint.json
 ```
 
 ### Variable Expansion
