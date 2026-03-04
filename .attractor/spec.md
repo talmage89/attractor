@@ -17,6 +17,12 @@
 
 Add all three event kinds to the default output filter in `onEvent` (lines 123–137) so they display without `--verbose`.
 
+#### Verbose mode: improve `cc_event` log lines
+
+**Current behavior**: `cc_event` logs display as `[ts] [cc_event]` with no useful information — just the event kind.
+
+**New behavior**: In verbose mode, `cc_event` log lines should include meaningful details from the `SDKMessage` payload — whatever fields are available (e.g., message type, tool use, token counts, model, etc.). Keep each line concise (single line), but surface enough information that the log is actually useful for debugging. The implementer should inspect the `SDKMessage` type from `@anthropic-ai/claude-agent-sdk` and decide which fields to extract.
+
 ---
 
 ### 2. Dynamic runtime parallelization
