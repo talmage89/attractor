@@ -1,0 +1,1 @@
+CI check complete. `gh` CLI is not available in this environment, so I verified by running the test suite locally instead. All **447 tests across 26 files passed** — no failures. Status written as `success`.

@@ -1,0 +1,10 @@
+{
+  "status": "success",
+  "suggestedNextIds": [],
+  "contextUpdates": {
+    "ci_passed": "true",
+    "ci_summary": "gh CLI unavailable; local test suite: 447 tests across 26 files all passed"
+  },
+  "notes": "gh CLI not found in environment; ran npx vitest run locally — 447/447 tests pass across 26 test files",
+  "costUsd": 0.15836625
+}
