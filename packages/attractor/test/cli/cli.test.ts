@@ -173,6 +173,93 @@ describe("formatEvent", () => {
     expect(result).toContain("handler crashed unexpectedly");
   });
 
+  it("formats parallel_started", () => {
+    const event: PipelineEvent = {
+      kind: "parallel_started",
+      nodeId: "fanout",
+      branchCount: 3,
+      timestamp: ts(5_000),
+    };
+    const result = formatEvent(event, BASE);
+    expect(result).toContain("[00:05]");
+    expect(result).toContain("⊞");
+    expect(result).toContain("fanout");
+    expect(result).toContain("parallel");
+    expect(result).toContain("3 branches");
+  });
+
+  it("formats parallel_branch_completed", () => {
+    const event: PipelineEvent = {
+      kind: "parallel_branch_completed",
+      nodeId: "branch_a",
+      branchIndex: 1,
+      totalBranches: 4,
+      outcome: { status: "success" },
+      timestamp: ts(10_000),
+    };
+    const result = formatEvent(event, BASE);
+    expect(result).toContain("[00:10]");
+    expect(result).toContain("├");
+    expect(result).toContain("branch_a");
+    expect(result).toContain("success");
+    expect(result).toContain("branch 2/4");
+  });
+
+  it("formats parallel_completed", () => {
+    const event: PipelineEvent = {
+      kind: "parallel_completed",
+      nodeId: "fanout",
+      successCount: 2,
+      failCount: 1,
+      timestamp: ts(15_000),
+    };
+    const result = formatEvent(event, BASE);
+    expect(result).toContain("[00:15]");
+    expect(result).toContain("⊞");
+    expect(result).toContain("fanout");
+    expect(result).toContain("done");
+    expect(result).toContain("2 succeeded");
+    expect(result).toContain("1 failed");
+  });
+
+  it("formats cc_event with assistant message", () => {
+    const event: PipelineEvent = {
+      kind: "cc_event",
+      nodeId: "build",
+      event: {
+        type: "assistant",
+        message: { model: "claude-sonnet-4-6", usage: { output_tokens: 150 } },
+      } as never,
+      timestamp: ts(8_000),
+    };
+    const result = formatEvent(event, BASE);
+    expect(result).toContain("[00:08]");
+    expect(result).toContain("[cc_event]");
+    expect(result).toContain("assistant");
+    expect(result).toContain("claude-sonnet-4-6");
+    expect(result).toContain("150 tokens");
+  });
+
+  it("formats cc_event with result message", () => {
+    const event: PipelineEvent = {
+      kind: "cc_event",
+      nodeId: "build",
+      event: {
+        type: "result",
+        subtype: "success",
+        duration_ms: 1200,
+        total_cost_usd: 0.0035,
+      } as never,
+      timestamp: ts(12_000),
+    };
+    const result = formatEvent(event, BASE);
+    expect(result).toContain("[cc_event]");
+    expect(result).toContain("result");
+    expect(result).toContain("success");
+    expect(result).toContain("1200ms");
+    expect(result).toContain("$0.0035");
+  });
+
   it("handles unknown event kind via default branch", () => {
     // Simulate a future event kind that the switch doesn't cover
     const event = {

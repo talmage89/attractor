@@ -155,6 +155,7 @@ export class ParallelHandler implements Handler {
           kind: "parallel_branch_completed",
           nodeId: edge.to,
           branchIndex: currentIdx,
+          totalBranches: edges.length,
           outcome: results[currentIdx],
           timestamp: Date.now(),
         });

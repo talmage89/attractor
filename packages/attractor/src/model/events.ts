@@ -27,7 +27,7 @@ export type PipelineEvent =
   | { kind: "human_answer"; answer: Answer; timestamp: number }
   | { kind: "checkpoint_saved"; nodeId: string; timestamp: number }
   | { kind: "parallel_started"; nodeId: string; branchCount: number; timestamp: number }
-  | { kind: "parallel_branch_completed"; nodeId: string; branchIndex: number; outcome: Outcome; timestamp: number }
+  | { kind: "parallel_branch_completed"; nodeId: string; branchIndex: number; totalBranches: number; outcome: Outcome; timestamp: number }
   | { kind: "parallel_completed"; nodeId: string; successCount: number; failCount: number; timestamp: number }
   | { kind: "cc_event"; nodeId: string; event: SDKMessage; timestamp: number }
   | { kind: "warning"; message: string; nodeId?: string; timestamp: number }

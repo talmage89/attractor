@@ -63,6 +63,32 @@ export function formatEvent(event: PipelineEvent, startTime: number): string {
       const secs = Math.floor((totalMs % 60000) / 1000);
       return `${ts} Pipeline completed: ${event.status} (${mins}m ${secs}s)`;
     }
+    case "parallel_started":
+      return `${ts} ⊞ ${event.nodeId} → parallel (${event.branchCount} branches)`;
+    case "parallel_branch_completed":
+      return `${ts}   ├ ${event.nodeId} → ${event.outcome.status} (branch ${event.branchIndex + 1}/${event.totalBranches})`;
+    case "parallel_completed":
+      return `${ts} ⊞ ${event.nodeId} → done (${event.successCount} succeeded, ${event.failCount} failed)`;
+    case "cc_event": {
+      const msg = event.event as Record<string, unknown>;
+      const type = String(msg["type"] ?? "unknown");
+      const parts: string[] = [type];
+      if (msg["subtype"]) parts.push(String(msg["subtype"]));
+      if (type === "assistant") {
+        const message = msg["message"] as Record<string, unknown> | undefined;
+        if (message) {
+          if (message["model"]) parts.push(String(message["model"]));
+          const usage = message["usage"] as Record<string, unknown> | undefined;
+          if (usage?.["output_tokens"]) parts.push(`${usage["output_tokens"]} tokens`);
+        }
+      } else if (type === "result") {
+        if (msg["duration_ms"] != null) parts.push(`${msg["duration_ms"]}ms`);
+        if (msg["total_cost_usd"] != null) parts.push(`$${(msg["total_cost_usd"] as number).toFixed(4)}`);
+      } else if (type === "tool_progress") {
+        if (msg["tool_name"]) parts.push(String(msg["tool_name"]));
+      }
+      return `${ts} [cc_event] ${parts.join(" ")}`;
+    }
     default:
       if ("kind" in event) {
         return `${ts} [${(event as { kind: string }).kind}]`;
@@ -130,7 +156,10 @@ export async function cmdRun(args: string[]): Promise<void> {
       event.kind === "stage_completed" ||
       event.kind === "human_question" ||
       event.kind === "warning" ||
-      event.kind === "error"
+      event.kind === "error" ||
+      event.kind === "parallel_started" ||
+      event.kind === "parallel_branch_completed" ||
+      event.kind === "parallel_completed"
     ) {
       process.stderr.write(line + "\n");
     }
