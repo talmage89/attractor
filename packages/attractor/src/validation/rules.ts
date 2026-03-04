@@ -380,6 +380,33 @@ function promptOnLlmNodesRule(graph: Graph): Diagnostic[] {
   return diags;
 }
 
+function foreachKeyValidRule(graph: Graph): Diagnostic[] {
+  const diags: Diagnostic[] = [];
+  for (const node of graph.nodes.values()) {
+    if (!node.raw.has("foreach_key")) continue;
+    if (node.shape !== "component") {
+      diags.push({
+        rule: "foreach_key_valid",
+        severity: "warning",
+        message: `Node '${node.id}' has foreach_key but is not shape=component`,
+        nodeId: node.id,
+        span: node.span,
+      });
+    }
+    const edges = outgoingEdges(graph, node.id);
+    if (edges.length !== 1) {
+      diags.push({
+        rule: "foreach_key_valid",
+        severity: "warning",
+        message: `Node '${node.id}' has foreach_key and must have exactly 1 outgoing edge (template branch), got ${edges.length}`,
+        nodeId: node.id,
+        span: node.span,
+      });
+    }
+  }
+  return diags;
+}
+
 export const BUILT_IN_RULES: LintRule[] = [
   startNodeRule,
   terminalNodeRule,
@@ -398,4 +425,5 @@ export const BUILT_IN_RULES: LintRule[] = [
   promptOnLlmNodesRule,
   invalidDefaultMaxRetryRule,
   invalidEdgeWeightRule,
+  foreachKeyValidRule,
 ];

@@ -391,6 +391,272 @@ describe("ParallelHandler", () => {
   });
 });
 
+describe("ParallelHandler dynamic (foreach_key)", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "attractor-parallel-dyn-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("spawns one branch per array item and sets item context", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test dynamic parallel"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component, foreach_key="items"]
+        worker [shape=box, prompt="Process $item"]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> worker
+        worker -> join
+        join -> e
+      }
+    `);
+
+    const capturedItems: string[] = [];
+    const mock: Handler = {
+      async execute(node: any, ctx: any): Promise<Outcome> {
+        if (node.id.startsWith("worker")) capturedItems.push(ctx.getString("item"));
+        return { status: "success" };
+      },
+    };
+
+    const registry = new HandlerRegistry(mock);
+    const handler = new ParallelHandler(registry);
+    const ctx = new Context();
+    ctx.set("items", JSON.stringify(["a", "b", "c"]));
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, ctx, graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(outcome.status).toBe("success");
+    expect(capturedItems.sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("uses custom item_key when specified", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test item_key"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component, foreach_key="files", item_key="test_file"]
+        worker [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> worker
+        worker -> join
+        join -> e
+      }
+    `);
+
+    const capturedValues: string[] = [];
+    const mock: Handler = {
+      async execute(node: any, ctx: any): Promise<Outcome> {
+        if (node.id.startsWith("worker")) capturedValues.push(ctx.getString("test_file"));
+        return { status: "success" };
+      },
+    };
+
+    const registry = new HandlerRegistry(mock);
+    const handler = new ParallelHandler(registry);
+    const ctx = new Context();
+    ctx.set("files", JSON.stringify(["test1.ts", "test2.ts"]));
+
+    await handler.execute(
+      graph.nodes.get("fork")!, ctx, graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(capturedValues.sort()).toEqual(["test1.ts", "test2.ts"]);
+  });
+
+  it("fails when foreach_key context value is not valid JSON", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test invalid JSON"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component, foreach_key="bad"]
+        worker [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork -> worker -> join -> e
+      }
+    `);
+
+    const registry = new HandlerRegistry(new MockHandler());
+    const handler = new ParallelHandler(registry);
+    const ctx = new Context();
+    ctx.set("bad", "not-json");
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, ctx, graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(outcome.status).toBe("fail");
+    expect(outcome.failureReason).toContain("not valid JSON");
+  });
+
+  it("fails when foreach_key value is not an array", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test non-array"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component, foreach_key="data"]
+        worker [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork -> worker -> join -> e
+      }
+    `);
+
+    const registry = new HandlerRegistry(new MockHandler());
+    const handler = new ParallelHandler(registry);
+    const ctx = new Context();
+    ctx.set("data", JSON.stringify({ key: "value" }));
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, ctx, graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(outcome.status).toBe("fail");
+    expect(outcome.failureReason).toContain("not a JSON array");
+  });
+
+  it("fails when foreach_key node has != 1 outgoing edge", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test multi-edge"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component, foreach_key="items"]
+        a [shape=box]
+        b [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> a
+        fork -> b
+        a -> join
+        b -> join
+        join -> e
+      }
+    `);
+
+    const registry = new HandlerRegistry(new MockHandler());
+    const handler = new ParallelHandler(registry);
+    const ctx = new Context();
+    ctx.set("items", JSON.stringify(["x", "y"]));
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, ctx, graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(outcome.status).toBe("fail");
+    expect(outcome.failureReason).toContain("exactly 1 outgoing edge");
+  });
+
+  it("cleans up synthetic nodes and edges after execution", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test cleanup"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component, foreach_key="items"]
+        worker [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> worker
+        worker -> join
+        join -> e
+      }
+    `);
+
+    const originalNodeCount = graph.nodes.size;
+    const originalEdgeCount = graph.edges.length;
+
+    const registry = new HandlerRegistry(new MockHandler());
+    const handler = new ParallelHandler(registry);
+    const ctx = new Context();
+    ctx.set("items", JSON.stringify(["a", "b"]));
+
+    await handler.execute(
+      graph.nodes.get("fork")!, ctx, graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(graph.nodes.size).toBe(originalNodeCount);
+    expect(graph.edges.length).toBe(originalEdgeCount);
+  });
+
+  it("returns suggestedNextIds pointing to the fan-in node", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test suggestedNextIds dynamic"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component, foreach_key="items"]
+        worker [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> worker
+        worker -> join
+        join -> e
+      }
+    `);
+
+    const registry = new HandlerRegistry(new MockHandler());
+    const handler = new ParallelHandler(registry);
+    const ctx = new Context();
+    ctx.set("items", JSON.stringify(["a"]));
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, ctx, graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(outcome.suggestedNextIds).toEqual(["join"]);
+  });
+
+  it("handles empty array gracefully", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test empty array"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        fork [shape=component, foreach_key="items"]
+        worker [shape=box]
+        join [shape=tripleoctagon]
+        s -> fork
+        fork -> worker
+        worker -> join
+        join -> e
+      }
+    `);
+
+    const registry = new HandlerRegistry(new MockHandler());
+    const handler = new ParallelHandler(registry);
+    const ctx = new Context();
+    ctx.set("items", JSON.stringify([]));
+
+    const outcome = await handler.execute(
+      graph.nodes.get("fork")!, ctx, graph,
+      { graph, cwd: tmpDir, logsRoot: tmpDir, interviewer: noopInterviewer } as any
+    );
+
+    expect(outcome.status).toBe("success");
+    expect(outcome.contextUpdates?.["parallel.success_count"]).toBe("0");
+  });
+});
+
 describe("FanInHandler", () => {
   it("selects best outcome from parallel results", async () => {
     const handler = new FanInHandler();

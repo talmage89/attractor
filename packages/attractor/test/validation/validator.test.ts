@@ -926,4 +926,67 @@ describe("validation", () => {
       expect(errors).toHaveLength(0);
     });
   });
+
+  describe("foreachKeyValidRule", () => {
+    it("warns when foreach_key node is not shape=component", () => {
+      const graph = parse(`
+        digraph G {
+          graph [goal="test"]
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          n [shape=box, foreach_key="items"]
+          s -> n -> e
+        }
+      `);
+      const diags = validate(graph);
+      const warnings = diags.filter(d => d.rule === "foreach_key_valid" && d.message.includes("not shape=component"));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0].severity).toBe("warning");
+      expect(warnings[0].nodeId).toBe("n");
+    });
+
+    it("warns when foreach_key node has != 1 outgoing edge", () => {
+      const graph = parse(`
+        digraph G {
+          graph [goal="test"]
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          fork [shape=component, foreach_key="items"]
+          a [shape=box]
+          b [shape=box]
+          join [shape=tripleoctagon]
+          s -> fork
+          fork -> a
+          fork -> b
+          a -> join
+          b -> join
+          join -> e
+        }
+      `);
+      const diags = validate(graph);
+      const warnings = diags.filter(d => d.rule === "foreach_key_valid" && d.message.includes("exactly 1 outgoing edge"));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0].severity).toBe("warning");
+    });
+
+    it("does not warn for a correctly configured foreach_key node", () => {
+      const graph = parse(`
+        digraph G {
+          graph [goal="test"]
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          fork [shape=component, foreach_key="items"]
+          worker [shape=box]
+          join [shape=tripleoctagon]
+          s -> fork
+          fork -> worker
+          worker -> join
+          join -> e
+        }
+      `);
+      const diags = validate(graph);
+      const warnings = diags.filter(d => d.rule === "foreach_key_valid");
+      expect(warnings).toHaveLength(0);
+    });
+  });
 });
