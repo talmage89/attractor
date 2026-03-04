@@ -1,0 +1,9 @@
+{
+  "status": "success",
+  "contextUpdates": {
+    "outcome": "success",
+    "bugs_found": "0"
+  },
+  "notes": "90 integration tests all pass. Dynamic parallel, event visibility, template chain, cleanup, throttling all correct. No bugs found. 2 minor observations logged.",
+  "costUsd": 4.51426575
+}

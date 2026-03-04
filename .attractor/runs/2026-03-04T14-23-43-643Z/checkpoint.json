@@ -1,0 +1,29 @@
+{
+  "timestamp": 1772634223655,
+  "currentNode": "plan",
+  "completedNodes": [
+    "setup"
+  ],
+  "nodeOutcomes": {
+    "setup": {
+      "status": "success",
+      "contextUpdates": {
+        "tool.output": "",
+        "tool.exit_code": "0",
+        "tool.stderr": ""
+      }
+    }
+  },
+  "nodeRetries": {},
+  "contextValues": {
+    "graph.goal": "Implement changes per .attractor/spec.md",
+    "__completedNodes": "[]",
+    "__nodeOutcomes": "[]",
+    "outcome": "success",
+    "tool.output": "",
+    "tool.exit_code": "0",
+    "tool.stderr": ""
+  },
+  "sessionMap": {},
+  "goalGateRetries": 0
+}

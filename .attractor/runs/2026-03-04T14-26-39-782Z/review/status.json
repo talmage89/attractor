@@ -1,0 +1,11 @@
+{
+  "status": "success",
+  "contextUpdates": {
+    "review_passed": "true",
+    "finding_count": "0",
+    "ci_passed": "true",
+    "ci_summary": "Build clean, typecheck zero errors, 476 tests passing (437 attractor + 39 attractor-lsp)"
+  },
+  "notes": "All 4 spec changes correctly implemented. No findings. CI green.",
+  "costUsd": 1.45492965
+}
