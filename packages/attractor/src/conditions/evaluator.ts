@@ -26,11 +26,26 @@ export function evaluateCondition(
   const clauses = parseCondition(condition);
   for (const clause of clauses) {
     const resolved = resolveKey(clause.key, outcome, context).trim();
-    if (clause.operator === "=") {
-      if (resolved !== clause.value) return false;
-    } else {
-      // !=
-      if (resolved === clause.value) return false;
+    switch (clause.operator) {
+      case "=":
+        if (resolved !== clause.value) return false;
+        break;
+      case "!=":
+        if (resolved === clause.value) return false;
+        break;
+      case ">":
+      case ">=":
+      case "<":
+      case "<=": {
+        const a = parseFloat(resolved);
+        const b = parseFloat(clause.value);
+        if (Number.isNaN(a) || Number.isNaN(b)) return false;
+        if (clause.operator === ">" && !(a > b)) return false;
+        if (clause.operator === ">=" && !(a >= b)) return false;
+        if (clause.operator === "<" && !(a < b)) return false;
+        if (clause.operator === "<=" && !(a <= b)) return false;
+        break;
+      }
     }
   }
   return true;

@@ -1,8 +1,17 @@
 export interface Clause {
   key: string;
-  operator: "=" | "!=";
+  operator: "=" | "!=" | ">" | ">=" | "<" | "<=";
   value: string;
 }
+
+const OPS: { token: string; operator: Clause["operator"] }[] = [
+  { token: ">=", operator: ">=" },
+  { token: "<=", operator: "<=" },
+  { token: "!=", operator: "!=" },
+  { token: ">", operator: ">" },
+  { token: "<", operator: "<" },
+  { token: "=", operator: "=" },
+];
 
 export function parseCondition(source: string): Clause[] {
   if (source.trim() === "") return [];
@@ -14,28 +23,25 @@ export function parseCondition(source: string): Clause[] {
     const clause = part.trim();
     if (clause === "") continue;
 
-    const neqIdx = clause.indexOf("!=");
-    if (neqIdx !== -1) {
-      const key = clause.slice(0, neqIdx).trim();
-      const value = clause.slice(neqIdx + 2).trim();
-      if (key === "") throw new Error(`Invalid condition clause: "${clause}"`);
-      clauses.push({ key, operator: "!=", value });
-      continue;
+    let matched = false;
+    for (const { token, operator } of OPS) {
+      const idx = clause.indexOf(token);
+      if (idx !== -1) {
+        const key = clause.slice(0, idx).trim();
+        const value = clause.slice(idx + token.length).trim();
+        if (key === "") throw new Error(`Invalid condition clause: "${clause}"`);
+        clauses.push({ key, operator, value });
+        matched = true;
+        break;
+      }
     }
 
-    const eqIdx = clause.indexOf("=");
-    if (eqIdx !== -1) {
-      const key = clause.slice(0, eqIdx).trim();
-      const value = clause.slice(eqIdx + 1).trim();
+    if (!matched) {
+      // Bare key: truthy check
+      const key = clause.trim();
       if (key === "") throw new Error(`Invalid condition clause: "${clause}"`);
-      clauses.push({ key, operator: "=", value });
-      continue;
+      clauses.push({ key, operator: "!=", value: "" });
     }
-
-    // Bare key: truthy check
-    const key = clause.trim();
-    if (key === "") throw new Error(`Invalid condition clause: "${clause}"`);
-    clauses.push({ key, operator: "!=", value: "" });
   }
 
   return clauses;

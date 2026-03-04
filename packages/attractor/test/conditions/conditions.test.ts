@@ -46,6 +46,38 @@ describe("condition parser", () => {
     const clauses = parseCondition("a=1 && b=2 && c!=3");
     expect(clauses).toHaveLength(3);
   });
+
+  it("parses greater-than operator", () => {
+    const clauses = parseCondition("context.x>5");
+    expect(clauses).toEqual([{ key: "context.x", operator: ">", value: "5" }]);
+  });
+
+  it("parses greater-than-or-equal operator", () => {
+    const clauses = parseCondition("context.x>=5");
+    expect(clauses).toEqual([{ key: "context.x", operator: ">=", value: "5" }]);
+  });
+
+  it("parses less-than operator", () => {
+    const clauses = parseCondition("context.x<5");
+    expect(clauses).toEqual([{ key: "context.x", operator: "<", value: "5" }]);
+  });
+
+  it("parses less-than-or-equal operator", () => {
+    const clauses = parseCondition("context.x<=5");
+    expect(clauses).toEqual([{ key: "context.x", operator: "<=", value: "5" }]);
+  });
+
+  it("parses compound condition with >= and <", () => {
+    const clauses = parseCondition("context.x>=5 && context.y<10");
+    expect(clauses).toHaveLength(2);
+    expect(clauses[0]).toEqual({ key: "context.x", operator: ">=", value: "5" });
+    expect(clauses[1]).toEqual({ key: "context.y", operator: "<", value: "10" });
+  });
+
+  it("bare key fallback still works with new operators present", () => {
+    const clauses = parseCondition("context.has_flag");
+    expect(clauses).toEqual([{ key: "context.has_flag", operator: "!=", value: "" }]);
+  });
 });
 
 describe("condition evaluator", () => {
@@ -174,5 +206,48 @@ describe("condition evaluator", () => {
     // "context.flag" resolves to "" (not "yes")
     expect(evaluateCondition("context.flag=yes", { status: "success" }, ctx)).toBe(false);
     expect(evaluateCondition("context.flag=", { status: "success" }, ctx)).toBe(true);
+  });
+
+  it("context.count>2 with count=3 → true", () => {
+    const ctx = makeContext({ "count": "3" });
+    expect(evaluateCondition("context.count>2", { status: "success" }, ctx)).toBe(true);
+  });
+
+  it("context.count>2 with count=2 → false", () => {
+    const ctx = makeContext({ "count": "2" });
+    expect(evaluateCondition("context.count>2", { status: "success" }, ctx)).toBe(false);
+  });
+
+  it("context.count>=2 with count=2 → true", () => {
+    const ctx = makeContext({ "count": "2" });
+    expect(evaluateCondition("context.count>=2", { status: "success" }, ctx)).toBe(true);
+  });
+
+  it("context.count<5 with count=3 → true", () => {
+    const ctx = makeContext({ "count": "3" });
+    expect(evaluateCondition("context.count<5", { status: "success" }, ctx)).toBe(true);
+  });
+
+  it("context.count<=3 with count=3 → true", () => {
+    const ctx = makeContext({ "count": "3" });
+    expect(evaluateCondition("context.count<=3", { status: "success" }, ctx)).toBe(true);
+  });
+
+  it("context.count>2 with count=abc → false (NaN guard)", () => {
+    const ctx = makeContext({ "count": "abc" });
+    expect(evaluateCondition("context.count>2", { status: "success" }, ctx)).toBe(false);
+  });
+
+  it("context.count>2 with count empty → false (NaN guard)", () => {
+    expect(evaluateCondition("context.count>2", { status: "success" }, new Context())).toBe(false);
+  });
+
+  it("mixed >= with && and != both evaluated", () => {
+    const ctx = makeContext({ "x": "1", "label": "good" });
+    expect(evaluateCondition(
+      "context.x>=1 && context.label!=bad",
+      { status: "success" },
+      ctx
+    )).toBe(true);
   });
 });
