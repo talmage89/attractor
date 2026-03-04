@@ -187,9 +187,21 @@ export class CodergenHandler implements Handler {
     const statusFilePath = path.join(stageDir, "status.json");
     const systemPromptAppend = buildStatusInstruction(statusFilePath, node, graph);
 
-    // 4. Create stage directory and write prompt.md
+    // 4. Create stage directory and append prompt.md
     await fs.mkdir(stageDir, { recursive: true });
-    await fs.writeFile(path.join(stageDir, "prompt.md"), finalPrompt, "utf-8");
+    const timestamp = new Date().toISOString();
+    const promptPath = path.join(stageDir, "prompt.md");
+    {
+      let existingPrompt = "";
+      try {
+        existingPrompt = await fs.readFile(promptPath, "utf-8");
+      } catch {
+        // file doesn't exist yet
+      }
+      const promptSeparator = existingPrompt ? "\n\n---\n\n" : "";
+      const promptHeader = `## ${node.id} — ${timestamp}`;
+      await fs.writeFile(promptPath, existingPrompt + promptSeparator + promptHeader + "\n\n" + finalPrompt, "utf-8");
+    }
 
     // 5. Call CC
     const ccOptions: Parameters<typeof runCC>[1] = {
@@ -212,8 +224,19 @@ export class CodergenHandler implements Handler {
       this.sessionManager.setSessionId(threadId, ccResult.sessionId);
     }
 
-    // 7. Write response
-    await fs.writeFile(path.join(stageDir, "response.md"), ccResult.text, "utf-8");
+    // 7. Append response
+    const responsePath = path.join(stageDir, "response.md");
+    {
+      let existingResponse = "";
+      try {
+        existingResponse = await fs.readFile(responsePath, "utf-8");
+      } catch {
+        // file doesn't exist yet
+      }
+      const responseSeparator = existingResponse ? "\n\n---\n\n" : "";
+      const responseHeader = `## ${node.id} — ${timestamp}`;
+      await fs.writeFile(responsePath, existingResponse + responseSeparator + responseHeader + "\n\n" + ccResult.text, "utf-8");
+    }
 
     // 8. Read status file
     let outcome: Outcome;

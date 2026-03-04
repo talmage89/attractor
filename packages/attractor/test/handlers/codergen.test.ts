@@ -207,7 +207,54 @@ describe("CodergenHandler", () => {
       path.join(config.logsRoot, "work", "response.md"),
       "utf-8"
     );
-    expect(responseContent).toBe("I did the work.");
+    expect(responseContent).toContain("I did the work.");
+    expect(responseContent).toContain("## work —");
+  });
+
+  it("appends to response.md and prompt.md on second execution", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt="Do the work"]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC
+      .mockResolvedValueOnce(makeCCResult({ text: "First response." }))
+      .mockResolvedValueOnce(makeCCResult({ text: "Second response." }));
+
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+    const node = graph.nodes.get("work")!;
+
+    // Execute twice
+    await handler.execute(node, new Context(), graph, config as any);
+    await handler.execute(node, new Context(), graph, config as any);
+
+    const responseContent = await fs.readFile(
+      path.join(config.logsRoot, "work", "response.md"),
+      "utf-8"
+    );
+    // Both responses present
+    expect(responseContent).toContain("First response.");
+    expect(responseContent).toContain("Second response.");
+    // Separator between them
+    expect(responseContent).toContain("---");
+    // Two headers
+    const headerMatches = responseContent.match(/## work — /g);
+    expect(headerMatches).toHaveLength(2);
+
+    const promptContent = await fs.readFile(
+      path.join(config.logsRoot, "work", "prompt.md"),
+      "utf-8"
+    );
+    // Both prompts present
+    const promptHeaderMatches = promptContent.match(/## work — /g);
+    expect(promptHeaderMatches).toHaveLength(2);
+    expect(promptContent).toContain("---");
   });
 
   it("stores session ID for full fidelity nodes", async () => {
