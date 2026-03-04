@@ -3,12 +3,12 @@ digraph Sprint {
 
   start [shape = "Mdiamond"]
   exit [shape = "Msquare"]
-  setup [shape = "box", prompt = "Read .attractor/prompts/sprint/setup.md and follow the instructions."]
+  setup [shape = "parallelogram", tool_command = "rm -rf .attractor/workspace && mkdir -p .attractor/workspace && cp .attractor/spec.md .attractor/workspace/spec.md && echo '# Progress' > .attractor/workspace/progress.md && git rev-parse HEAD > .attractor/workspace/base-commit"]
   plan [shape = "box", prompt = "Read .attractor/prompts/sprint/plan.md and follow the instructions.", llm_model = "claude-opus-4-6"]
   audit [shape = "box", prompt = "Read .attractor/prompts/sprint/audit.md and follow the instructions.", llm_model = "claude-opus-4-6"]
   implement [shape = "box", prompt = "Read .attractor/prompts/sprint/implement.md and follow the instructions."]
-  ci_check [shape = "box", prompt = "Read .attractor/prompts/sprint/ci_check.md and follow the instructions."]
   review [shape = "box", prompt = "Read .attractor/prompts/sprint/review.md and follow the instructions.", llm_model = "claude-opus-4-6"]
+  test_plan [shape = "box", prompt = "Read .attractor/prompts/sprint/test-plan.md and follow the instructions.", llm_model = "opus"]
   test_fanout [shape = "component", max_parallel = "5"]
   test_a [shape = "box", prompt = "Read .attractor/prompts/sprint/test.md and follow the instructions."]
   test_b [shape = "box", prompt = "Read .attractor/prompts/sprint/test.md and follow the instructions."]
@@ -23,11 +23,10 @@ digraph Sprint {
   audit -> implement [condition = "context.audit_passed=true"]
   audit -> plan [condition = "context.audit_passed!=true"]
   implement -> implement [condition = "context.implementation_complete!=true"]
-  implement -> ci_check [condition = "context.implementation_complete=true"]
-  ci_check -> review [condition = "context.ci_passed=true"]
-  ci_check -> implement [condition = "context.ci_passed!=true"]
-  review -> test_fanout [condition = "context.review_passed=true"]
+  implement -> review [condition = "context.implementation_complete=true"]
+  review -> test_plan [condition = "context.review_passed=true"]
   review -> implement [condition = "context.review_passed!=true"]
+  test_plan -> test_fanout
   test_fanout -> test_a -> test_merge
   test_fanout -> test_b -> test_merge
   test_fanout -> test_c -> test_merge
@@ -35,6 +34,6 @@ digraph Sprint {
   test_fanout -> test_e -> test_merge
   test_merge -> wrapup [condition = "context.parallel.fail_count=0"]
   test_merge -> fix [condition = "context.parallel.fail_count!=0"]
-  fix -> test_fanout
+  fix -> test_plan
   wrapup -> exit
 }

@@ -12,19 +12,25 @@ You are one of 5 test agents running concurrently. To avoid conflicts:
 
 ## Steps
 
-1. **Read the workspace files:**
+1. **Read the test plan.** Read `.attractor/workspace/test-plan.md` and find the section assigned to your node name. Follow your assigned primary and secondary focus areas — they were designed to give you a distinct angle that complements the other test agents.
+2. **Read the workspace files:**
    - `.attractor/workspace/spec.md` — what was supposed to be built
    - `.attractor/workspace/progress.md` — what was actually built
-2. **Validate the codebase.** Run all three checks first:
+3. **Validate the codebase.** Run all three checks first:
    - `pnpm run build` — must compile cleanly
    - `pnpm run typecheck` — must produce zero errors
    - `pnpm test` — all tests must pass
    If anything fails, this counts as a finding.
-3. **Exercise the application.** Test both the new feature AND its broader impact:
-   - **Spec coverage:** Run the core happy paths described in the spec. Try edge cases, boundary conditions, empty states, malformed input, missing files, concurrent usage.
-   - **Regression coverage:** Review which files were modified (check `progress.md` and `git log`). Test related functionality that may have been affected by the changes — not just the spec's happy paths. For example, if a parser was modified, test existing inputs that should still work. If a shared utility was changed, exercise its other callers.
+4. **Exercise the application with integration tests.** You have full write access to your home directory (`~/`). Go beyond the unit test suite — create real artifacts and test the application end-to-end:
+   - **Create test `.dag` files** in `~/` that exercise the new features, then run them with the CLI (e.g. `npx attractor lint`, `npx attractor run`).
+   - **Write scratch scripts** (e.g. `~/test_a-scratch.mjs`) that import and exercise the library API directly.
+   - **Test real workflows**: If a parser was modified, create DAGs that exercise the new syntax. If a handler was changed, build a pipeline that triggers it.
+   - **Test edge cases**: Malformed input, empty files, missing attributes, boundary conditions.
+   - **Test regressions**: Review which files were modified (check `progress.md` and `git log`). Test related functionality that may have been affected — not just the new features.
    - Verify error messages are clear and helpful.
-4. **Write per-agent findings.** Write your results to `.attractor/workspace/findings-{node_name}.md` (e.g. `findings-test_a.md`):
+
+   The existing unit test suite (`pnpm test`) is your baseline validation — the integration tests above are your primary activity.
+5. **Write per-agent findings.** Write your results to `.attractor/workspace/findings-{node_name}.md` (e.g. `findings-test_a.md`):
    - For each bug, describe: what you did, what you expected, what happened instead.
    - Include reproduction steps specific enough that another agent can reproduce the issue.
    - If no bugs found, write "No bugs found. Application behaves as specified."
