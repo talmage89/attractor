@@ -7,15 +7,17 @@ import type { Token } from "attractor";
 
 type AttrPair = { key: string; value: string };
 
-type GraphAttr = { kind: "graph_attr"; key: string; value: string };
+type GraphAttr = { kind: "graph_attr"; key: string; value: string; startLine: number; endLine: number };
 type DefaultsStmt = {
   kind: "defaults";
   target: "node" | "edge" | "graph";
   attrs: AttrPair[];
+  startLine: number;
+  endLine: number;
 };
-type NodeDecl = { kind: "node"; id: string; attrs: AttrPair[] };
-type EdgeChain = { kind: "edge"; ids: string[]; attrs: AttrPair[] };
-type Subgraph = { kind: "subgraph"; name?: string; stmts: CstStmt[] };
+type NodeDecl = { kind: "node"; id: string; attrs: AttrPair[]; startLine: number; endLine: number };
+type EdgeChain = { kind: "edge"; ids: string[]; attrs: AttrPair[]; startLine: number; endLine: number };
+type Subgraph = { kind: "subgraph"; name?: string; stmts: CstStmt[]; startLine: number; endLine: number };
 type CstStmt = GraphAttr | DefaultsStmt | NodeDecl | EdgeChain | Subgraph;
 
 // ─── Attribute ordering ───────────────────────────────────────────────────────
@@ -87,6 +89,7 @@ function emitId(s: string): string {
 class CstParser {
   private tokens: Token[];
   private pos = 0;
+  private lastLine = 0;
 
   constructor(tokens: Token[]) {
     this.tokens = tokens;
@@ -97,7 +100,9 @@ class CstParser {
   }
 
   private advance(): Token {
-    return this.tokens[this.pos++] ?? { kind: "EOF", value: "", line: 0, column: 0 };
+    const t = this.tokens[this.pos++] ?? { kind: "EOF", value: "", line: 0, column: 0 };
+    this.lastLine = t.line;
+    return t;
   }
 
   private check(kind: string): boolean {
@@ -143,6 +148,13 @@ class CstParser {
   }
 
   private parseStatement(): CstStmt | null {
+    const startLine = this.peek().line;
+    const stmt = this.parseStatementCore();
+    if (stmt === null) return null;
+    return { ...stmt, startLine, endLine: this.lastLine };
+  }
+
+  private parseStatementCore(): CstStmt | null {
     const t = this.peek();
 
     if (t.kind === "NODE") {
@@ -292,6 +304,18 @@ function emitSubgraph(s: Subgraph, indent: number): string {
   return `${header}\n${body}\n${prefix}}`;
 }
 
+/**
+ * Returns true if `a` and `b` are directly adjacent in `allStmts` (no other
+ * statements between them) AND had at least one blank line between them in the
+ * original source.  Both conditions must hold before we emit a blank line.
+ */
+function hadBlankLineBetween(allStmts: CstStmt[], a: CstStmt, b: CstStmt): boolean {
+  const ai = allStmts.indexOf(a);
+  const bi = allStmts.indexOf(b);
+  if (bi !== ai + 1) return false; // not adjacent in source
+  return b.startLine - a.endLine >= 2;
+}
+
 function emitBody(stmts: CstStmt[], indent: number): string {
   const prefix = "  ".repeat(indent);
 
@@ -309,36 +333,45 @@ function emitBody(stmts: CstStmt[], indent: number): string {
   const edges = stmts.filter((s): s is EdgeChain => s.kind === "edge");
   const subgraphs = stmts.filter((s): s is Subgraph => s.kind === "subgraph");
 
+  function joinSection<T extends CstStmt>(items: T[], emitOne: (s: T) => string): string {
+    const parts: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (i > 0) {
+        parts.push(hadBlankLineBetween(stmts, items[i - 1], items[i]) ? "\n\n" : "\n");
+      }
+      parts.push(emitOne(items[i]));
+    }
+    return parts.join("");
+  }
+
   const sections: string[] = [];
 
   if (graphAttrs.length > 0) {
-    sections.push(
-      graphAttrs.map((a) => `${prefix}${a.key} = ${quoteValue(a.value)}`).join("\n"),
-    );
+    sections.push(joinSection(graphAttrs, (a) => `${prefix}${a.key} = ${quoteValue(a.value)}`));
   }
 
   if (graphDefaults.length > 0) {
-    sections.push(graphDefaults.map((d) => emitDefaults(d, prefix)).join("\n"));
+    sections.push(joinSection(graphDefaults, (d) => emitDefaults(d, prefix)));
   }
 
   if (nodeDefaults.length > 0) {
-    sections.push(nodeDefaults.map((d) => emitDefaults(d, prefix)).join("\n"));
+    sections.push(joinSection(nodeDefaults, (d) => emitDefaults(d, prefix)));
   }
 
   if (edgeDefaults.length > 0) {
-    sections.push(edgeDefaults.map((d) => emitDefaults(d, prefix)).join("\n"));
+    sections.push(joinSection(edgeDefaults, (d) => emitDefaults(d, prefix)));
   }
 
   if (nodes.length > 0) {
-    sections.push(nodes.map((n) => emitNodeDecl(n, prefix)).join("\n"));
+    sections.push(joinSection(nodes, (n) => emitNodeDecl(n, prefix)));
   }
 
   if (edges.length > 0) {
-    sections.push(edges.map((e) => emitEdgeChain(e, prefix)).join("\n"));
+    sections.push(joinSection(edges, (e) => emitEdgeChain(e, prefix)));
   }
 
-  for (const sub of subgraphs) {
-    sections.push(emitSubgraph(sub, indent));
+  if (subgraphs.length > 0) {
+    sections.push(joinSection(subgraphs, (s) => emitSubgraph(s, indent)));
   }
 
   return sections.join("\n\n");

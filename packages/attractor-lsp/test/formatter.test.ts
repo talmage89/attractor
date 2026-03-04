@@ -252,4 +252,126 @@ describe("format()", () => {
     expect(result).not.toBeNull();
     expect(result).toContain("edge -> b");
   });
+
+  // ── Blank-line preservation tests (Phase 2) ─────────────────────────────────
+
+  it("preserves one blank line between nodes that had a blank line in source", () => {
+    const input = [
+      `digraph G {`,
+      `  a [shape = "box"]`,
+      ``,
+      `  b [shape = "circle"]`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    expect(result).toBe(
+      [
+        `digraph G {`,
+        `  a [shape = "box"]`,
+        ``,
+        `  b [shape = "circle"]`,
+        `}`,
+      ].join("\n"),
+    );
+  });
+
+  it("collapses multiple consecutive blank lines to one", () => {
+    const input = [
+      `digraph G {`,
+      `  a [shape = "box"]`,
+      ``,
+      ``,
+      `  b [shape = "circle"]`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    expect(result).toBe(
+      [
+        `digraph G {`,
+        `  a [shape = "box"]`,
+        ``,
+        `  b [shape = "circle"]`,
+        `}`,
+      ].join("\n"),
+    );
+  });
+
+  it("does not insert blank line between nodes that had no blank line in source", () => {
+    const input = [
+      `digraph G {`,
+      `  a [shape = "box"]`,
+      `  b [shape = "circle"]`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    expect(result).toBe(
+      [
+        `digraph G {`,
+        `  a [shape = "box"]`,
+        `  b [shape = "circle"]`,
+        `}`,
+      ].join("\n"),
+    );
+  });
+
+  it("does not insert blank line between section-reordered nodes that were not adjacent in source", () => {
+    // node_a and node_b are separated by an edge in the source;
+    // after reordering they appear adjacent in the nodes section but should not get a blank line.
+    const input = [
+      `digraph G {`,
+      `  a [shape = "Mdiamond"]`,
+      `  a -> b`,
+      `  b [shape = "Msquare"]`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    expect(result).toBe(
+      [
+        `digraph G {`,
+        `  a [shape = "Mdiamond"]`,
+        `  b [shape = "Msquare"]`,
+        ``,
+        `  a -> b`,
+        `}`,
+      ].join("\n"),
+    );
+  });
+
+  it("preserves blank line between edges in edge section", () => {
+    const input = [
+      `digraph G {`,
+      `  s [shape = "Mdiamond"]`,
+      `  e [shape = "Msquare"]`,
+      `  s -> a`,
+      ``,
+      `  a -> e`,
+      `}`,
+    ].join("\n");
+    const result = formatted(input);
+    expect(result).toBe(
+      [
+        `digraph G {`,
+        `  s [shape = "Mdiamond"]`,
+        `  e [shape = "Msquare"]`,
+        ``,
+        `  s -> a`,
+        ``,
+        `  a -> e`,
+        `}`,
+      ].join("\n"),
+    );
+  });
+
+  it("is idempotent when blank lines are present", () => {
+    const withBlanks = [
+      `digraph G {`,
+      `  a [shape = "box"]`,
+      ``,
+      `  b [shape = "circle"]`,
+      ``,
+      `  a -> b`,
+      `}`,
+    ].join("\n");
+    expect(formatted(withBlanks)).toBe(withBlanks);
+  });
 });
