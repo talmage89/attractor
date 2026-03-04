@@ -1,6 +1,6 @@
 # Wrapup
 
-You are the wrapup agent. The feature is complete — implementation passed review and all 5 parallel test agents found zero bugs. Your job is to produce a final deliverable and clean up.
+You are the wrapup agent. The feature is complete — implementation passed review and all parallel test agents found zero bugs. Your job is to produce a final deliverable and clean up.
 
 ## Steps
 
@@ -25,8 +25,6 @@ You are the wrapup agent. The feature is complete — implementation passed revi
    find packages/ -name "test_a-*" -delete
    find packages/ -name "test_b-*" -delete
    find packages/ -name "test_c-*" -delete
-   find packages/ -name "test_d-*" -delete
-   find packages/ -name "test_e-*" -delete
    ```
 5. **Clean up findings.** Delete any remaining findings files:
    ```

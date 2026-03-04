@@ -1,6 +1,6 @@
 # Test Plan
 
-You are the test planning agent. Your job is to study what was built in this iteration and create a test plan that gives each of the 5 parallel test agents a distinct focus area — with deliberate overlap so that critical paths get exercised by more than one agent.
+You are the test planning agent. Your job is to study what was built in this iteration and create a test plan that gives each of the 3 parallel test agents a distinct focus area — with deliberate overlap so that critical paths get exercised by more than one agent.
 
 ## Steps
 
@@ -21,7 +21,7 @@ You are the test planning agent. Your job is to study what was built in this ite
    - Integration points between new and existing code
    - CLI behavior, file I/O, configuration
 
-4. **Assign focus areas.** Write a test plan to `.attractor/workspace/test-plan.md` with a section for each agent (`test_a` through `test_e`). For each agent specify:
+4. **Assign focus areas.** Write a test plan to `.attractor/workspace/test-plan.md` with a section for each agent (`test_a` through `test_c`). For each agent specify:
    - **Primary focus:** The main area this agent should spend most of its time on.
    - **Secondary focus:** A second area to explore after the primary, chosen to overlap with another agent's primary focus.
    - **Specific test scenarios:** 3-5 concrete scenarios to investigate, with enough detail to be actionable.

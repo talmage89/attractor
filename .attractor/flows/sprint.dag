@@ -9,12 +9,10 @@ digraph Sprint {
   implement [shape = "box", prompt = "Read .attractor/prompts/sprint/implement.md and follow the instructions."]
   review [shape = "box", prompt = "Read .attractor/prompts/sprint/review.md and follow the instructions.", llm_model = "opus"]
   test_plan [shape = "box", prompt = "Read .attractor/prompts/sprint/test-plan.md and follow the instructions.", llm_model = "opus"]
-  test_fanout [shape = "component", max_parallel = "5"]
+  test_fanout [shape = "component", max_parallel = "3"]
   test_a [shape = "box", prompt = "Read .attractor/prompts/sprint/test.md and follow the instructions."]
   test_b [shape = "box", prompt = "Read .attractor/prompts/sprint/test.md and follow the instructions."]
   test_c [shape = "box", prompt = "Read .attractor/prompts/sprint/test.md and follow the instructions."]
-  test_d [shape = "box", prompt = "Read .attractor/prompts/sprint/test.md and follow the instructions."]
-  test_e [shape = "box", prompt = "Read .attractor/prompts/sprint/test.md and follow the instructions."]
   test_merge [shape = "tripleoctagon"]
   fix [shape = "box", prompt = "Read .attractor/prompts/sprint/fix.md and follow the instructions."]
   wrapup [shape = "box", prompt = "Read .attractor/prompts/sprint/wrapup.md and follow the instructions."]
@@ -30,8 +28,6 @@ digraph Sprint {
   test_fanout -> test_a -> test_merge
   test_fanout -> test_b -> test_merge
   test_fanout -> test_c -> test_merge
-  test_fanout -> test_d -> test_merge
-  test_fanout -> test_e -> test_merge
   test_merge -> wrapup [condition = "context.parallel.fail_count=0"]
   test_merge -> fix [condition = "context.parallel.fail_count!=0"]
   fix -> test_plan
