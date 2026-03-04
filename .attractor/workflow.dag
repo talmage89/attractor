@@ -1,49 +1,45 @@
 digraph Sprint {
-  graph [goal="Implement changes per .attractor/spec.md"]
+  graph [goal = "Implement changes per .attractor/spec.md"]
 
-  start [shape=Mdiamond]
-  exit  [shape=Msquare]
-
-  setup      [shape=box, prompt="Read .attractor/prompts/setup.md and follow the instructions."]
-  plan       [shape=box, prompt="Read .attractor/prompts/plan.md and follow the instructions."]
-  audit      [shape=box, prompt="Read .attractor/prompts/audit.md and follow the instructions."]
-  implement  [shape=box, prompt="Read .attractor/prompts/implement.md and follow the instructions."]
-  ci_check   [shape=box, prompt="Read .attractor/prompts/ci_check.md and follow the instructions."]
-  review     [shape=box, prompt="Read .attractor/prompts/review.md and follow the instructions."]
-  test_fanout [shape=component, max_parallel="3"]
-  test_a     [shape=box, prompt="Read .attractor/prompts/test.md and follow the instructions."]
-  test_b     [shape=box, prompt="Read .attractor/prompts/test.md and follow the instructions."]
-  test_c     [shape=box, prompt="Read .attractor/prompts/test.md and follow the instructions."]
-  test_merge [shape=tripleoctagon]
-  fix        [shape=box, prompt="Read .attractor/prompts/fix.md and follow the instructions."]
-  wrapup     [shape=box, prompt="Read .attractor/prompts/wrapup.md and follow the instructions."]
+  start [shape = "Mdiamond"]
+  exit [shape = "Msquare"]
+  setup [shape = "box", prompt = "Read .attractor/prompts/setup.md and follow the instructions."]
+  plan [shape = "box", prompt = "Read .attractor/prompts/plan.md and follow the instructions.", llm_model = "opus"]
+  audit [shape = "box", prompt = "Read .attractor/prompts/audit.md and follow the instructions.", llm_model = "opus"]
+  implement [shape = "box", prompt = "Read .attractor/prompts/implement.md and follow the instructions."]
+  ci_check [shape = "box", prompt = "Read .attractor/prompts/ci_check.md and follow the instructions."]
+  review [shape = "box", prompt = "Read .attractor/prompts/review.md and follow the instructions.", llm_model = "opus"]
+  test_fanout [shape = "component", max_parallel = "5"]
+  test_a [shape = "box", prompt = "Read .attractor/prompts/test.md and follow the instructions."]
+  test_b [shape = "box", prompt = "Read .attractor/prompts/test.md and follow the instructions."]
+  test_c [shape = "box", prompt = "Read .attractor/prompts/test.md and follow the instructions."]
+  test_d [shape = "box", prompt = "Read .attractor/prompts/test.md and follow the instructions."]
+  test_e [shape = "box", prompt = "Read .attractor/prompts/test.md and follow the instructions."]
+  test_merge [shape = "tripleoctagon"]
+  fix [shape = "box", prompt = "Read .attractor/prompts/fix.md and follow the instructions."]
+  wrapup [shape = "box", prompt = "Read .attractor/prompts/wrapup.md and follow the instructions."]
 
   start -> setup -> plan -> audit
-
-  audit -> implement [condition="context.audit_passed=true"]
-  audit -> plan      [condition="context.audit_passed!=true"]
-
-  implement -> implement [condition="context.implementation_complete!=true"]
-  implement -> ci_check  [condition="context.implementation_complete=true"]
-
-  ci_check -> review    [condition="context.ci_passed=true"]
-  ci_check -> implement [condition="context.ci_passed!=true"]
-
-  review -> test_fanout [condition="context.review_passed=true"]
-  review -> implement   [condition="context.review_passed!=true"]
-
+  audit -> implement [condition = "context.audit_passed=true"]
+  audit -> plan [condition = "context.audit_passed!=true"]
+  implement -> implement [condition = "context.implementation_complete!=true"]
+  implement -> ci_check [condition = "context.implementation_complete=true"]
+  ci_check -> review [condition = "context.ci_passed=true"]
+  ci_check -> implement [condition = "context.ci_passed!=true"]
+  review -> test_fanout [condition = "context.review_passed=true"]
+  review -> implement [condition = "context.review_passed!=true"]
   test_fanout -> test_a
   test_fanout -> test_b
   test_fanout -> test_c
-
+  test_fanout -> test_d
+  test_fanout -> test_e
   test_a -> test_merge
   test_b -> test_merge
   test_c -> test_merge
-
-  test_merge -> wrapup [condition="context.parallel.fail_count=0"]
-  test_merge -> fix    [condition="context.parallel.fail_count!=0"]
-
+  test_d -> test_merge
+  test_e -> test_merge
+  test_merge -> wrapup [condition = "context.parallel.fail_count=0"]
+  test_merge -> fix [condition = "context.parallel.fail_count!=0"]
   fix -> test_fanout
-
   wrapup -> exit
 }

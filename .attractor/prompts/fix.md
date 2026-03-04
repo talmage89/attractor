@@ -9,6 +9,8 @@ You are a bug-fixing agent. Your job is to fix the issues found during testing.
    - `.attractor/workspace/findings-test_a.md`
    - `.attractor/workspace/findings-test_b.md`
    - `.attractor/workspace/findings-test_c.md`
+   - `.attractor/workspace/findings-test_d.md`
+   - `.attractor/workspace/findings-test_e.md`
    Not all of these will exist — read whichever are present.
 2. **Read the spec.** Read `.attractor/workspace/spec.md` to understand the expected behavior.
 3. **Fix each issue.** For every bug across all findings files:
