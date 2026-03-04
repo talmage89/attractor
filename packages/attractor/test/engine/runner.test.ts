@@ -1298,4 +1298,89 @@ describe("execution engine", () => {
     expect(gateEdge!.to).toBe("path_b");
     expect(gateEdge!.reason).toBe("suggested");
   });
+
+  it("BUG-A01: pipeline fails when foreach_key context is invalid JSON (not silently succeeds)", async () => {
+    // When executeDynamic() fails due to invalid context (invalid JSON, non-array, etc.),
+    // the runner must NOT follow the template edge to the proc node. The pipeline
+    // should fail and the template node must NOT execute.
+    const graph = parse(`
+      digraph G {
+        graph [goal="BUG-A01 regression"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        setup [shape=box]
+        fanout [shape=component, foreach_key="tool.output"]
+        proc  [shape=box]
+        merge [shape=tripleoctagon]
+        s -> setup -> fanout -> proc -> merge -> e
+      }
+    `);
+
+    const callLog: string[] = [];
+    const mock: Handler = {
+      async execute(node: any): Promise<Outcome> {
+        callLog.push(node.id);
+        return { status: "success" };
+      },
+    };
+
+    const registry = new HandlerRegistry(mock);
+    registry.register("parallel", new ParallelHandler(registry));
+    registry.register("parallel.fan_in", new FanInHandler());
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    // Pipeline must fail — context key "tool.output" was never set
+    expect(result.status).toBe("fail");
+    // The template node "proc" must NOT have executed
+    expect(callLog).not.toContain("proc");
+    // "fanout" was recorded as a completed node with fail outcome
+    expect(result.nodeOutcomes.get("fanout")?.status).toBe("fail");
+  });
+
+  it("BUG-A01: pipeline fails when foreach_key value is a JSON object (not array)", async () => {
+    // setup node sets items to a JSON object; fanout should fail with suggestedNextIds=[]
+    const graph = parse(`
+      digraph G {
+        graph [goal="BUG-A01 non-array"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        setup [shape=box]
+        fanout [shape=component, foreach_key="items"]
+        proc  [shape=box]
+        merge [shape=tripleoctagon]
+        s -> setup -> fanout -> proc -> merge -> e
+      }
+    `);
+
+    const callLog: string[] = [];
+    const registry = new HandlerRegistry({
+      async execute(node: any): Promise<Outcome> {
+        callLog.push(node.id);
+        if (node.id === "setup") {
+          return { status: "success", contextUpdates: { "items": '{"not":"array"}' } };
+        }
+        return { status: "success" };
+      },
+    });
+    registry.register("parallel", new ParallelHandler(registry));
+    registry.register("parallel.fan_in", new FanInHandler());
+
+    const result = await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs-nonarray"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    expect(result.status).toBe("fail");
+    expect(callLog).not.toContain("proc");
+  });
 });

@@ -134,6 +134,7 @@ export class ParallelHandler implements Handler {
       return {
         status: "fail",
         failureReason: `Dynamic parallel node "${node.id}" must have exactly 1 outgoing edge (template branch), got ${templateEdges.length}`,
+        suggestedNextIds: [],
       };
     }
 
@@ -143,18 +144,18 @@ export class ParallelHandler implements Handler {
     try {
       const parsed = JSON.parse(rawValue);
       if (!Array.isArray(parsed)) {
-        return { status: "fail", failureReason: `Context key "${foreachKey}" is not a JSON array` };
+        return { status: "fail", failureReason: `Context key "${foreachKey}" is not a JSON array`, suggestedNextIds: [] };
       }
       items = parsed;
     } catch {
-      return { status: "fail", failureReason: `Context key "${foreachKey}" is not valid JSON` };
+      return { status: "fail", failureReason: `Context key "${foreachKey}" is not valid JSON`, suggestedNextIds: [] };
     }
 
     // Collect template sub-chain (before adding any synthetics)
     const templateStart = templateEdges[0].to;
     const templateChain = collectTemplateChain(graph, templateStart);
     if (templateChain.length === 0) {
-      return { status: "fail", failureReason: `Dynamic parallel node "${node.id}" template chain is empty` };
+      return { status: "fail", failureReason: `Dynamic parallel node "${node.id}" template chain is empty`, suggestedNextIds: [] };
     }
 
     // Find fan-in before mutating the graph

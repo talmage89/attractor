@@ -502,6 +502,8 @@ describe("ParallelHandler dynamic (foreach_key)", () => {
 
     expect(outcome.status).toBe("fail");
     expect(outcome.failureReason).toContain("not valid JSON");
+    // suggestedNextIds=[] signals runner to stop traversal (BUG-A01)
+    expect(outcome.suggestedNextIds).toEqual([]);
   });
 
   it("fails when foreach_key value is not an array", async () => {
@@ -529,6 +531,8 @@ describe("ParallelHandler dynamic (foreach_key)", () => {
 
     expect(outcome.status).toBe("fail");
     expect(outcome.failureReason).toContain("not a JSON array");
+    // suggestedNextIds=[] signals runner to stop traversal (BUG-A01)
+    expect(outcome.suggestedNextIds).toEqual([]);
   });
 
   it("fails when foreach_key node has != 1 outgoing edge", async () => {
@@ -562,6 +566,8 @@ describe("ParallelHandler dynamic (foreach_key)", () => {
 
     expect(outcome.status).toBe("fail");
     expect(outcome.failureReason).toContain("exactly 1 outgoing edge");
+    // suggestedNextIds=[] signals runner to stop traversal (BUG-A01)
+    expect(outcome.suggestedNextIds).toEqual([]);
   });
 
   it("cleans up synthetic nodes and edges after execution", async () => {
@@ -701,5 +707,19 @@ describe("FanInHandler", () => {
 
     expect(outcome.status).toBe("success"); // fan-in always succeeds (it reports)
     expect(outcome.contextUpdates?.["parallel.fan_in.best_outcome"]).toBe("fail");
+  });
+
+  it("succeeds with empty array (0 branches ran from dynamic parallel)", async () => {
+    // BUG-A02: parallel.results="[]" should succeed, not fail with "No parallel results"
+    const handler = new FanInHandler();
+    const ctx = new Context();
+    ctx.set("parallel.results", "[]");
+
+    const outcome = await handler.execute(
+      { id: "join" } as any, ctx, {} as any, {} as any
+    );
+
+    expect(outcome.status).toBe("success");
+    expect(outcome.contextUpdates?.["parallel.fan_in.best_outcome"]).toBe("");
   });
 });

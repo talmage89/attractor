@@ -30,7 +30,8 @@ export class FanInHandler implements Handler {
     }
 
     if (outcomes.length === 0) {
-      return { status: "fail", failureReason: "No parallel results" };
+      // Empty array = 0 branches ran (dynamic parallel with empty input) = success
+      return { status: "success", contextUpdates: { "parallel.fan_in.best_outcome": "", "parallel.fan_in.best_notes": "" } };
     }
 
     // Rank by status: success > partial_success > retry > fail

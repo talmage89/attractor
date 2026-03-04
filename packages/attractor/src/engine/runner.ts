@@ -410,6 +410,14 @@ export async function run(config: RunConfig): Promise<RunResult> {
     }
 
     // f. SELECT NEXT EDGE
+    // An explicitly-empty suggestedNextIds signals "stop here without following
+    // any edges" (used by dynamic parallel to prevent routing through the
+    // template edge when an infrastructure failure occurs before branches run).
+    if (outcome.suggestedNextIds !== undefined && outcome.suggestedNextIds.length === 0) {
+      if (outcome.status === "fail") finalStatus = "fail";
+      break loop;
+    }
+
     // Check for a suggested next node. When a handler sets suggestedNextIds[0],
     // that routing decision is authoritative and must not be overridden by
     // condition-based edge selection (BUG-011: WaitForHumanHandler's user
