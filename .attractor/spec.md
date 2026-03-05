@@ -1,138 +1,255 @@
-# Attractor — Iteration Spec
+# Spec: Semantic Tokens + VS Code Extension
 
-## Changes
+## Overview
 
-### 1. Parallel flow visibility in default CLI output
-
-**Package**: `attractor`
-**File**: `packages/attractor/src/cli.ts`
-
-**Current behavior**: `parallel_started`, `parallel_branch_completed`, and `parallel_completed` events fall through to the generic `[kind]` handler in `formatEvent`. They are also excluded from default (non-verbose) output.
-
-**New behavior**: Add formatting cases in `formatEvent()` for the three parallel event kinds:
-
-- `parallel_started`: `[ts] ⊞ nodeId → parallel (N branches)`
-- `parallel_branch_completed`: `[ts]   ├ branchNodeId → status (branch N/total)`
-- `parallel_completed`: `[ts] ⊞ nodeId → done (N succeeded, M failed)`
-
-Add all three event kinds to the default output filter in `onEvent` (lines 123–137) so they display without `--verbose`.
-
-#### Verbose mode: improve `cc_event` log lines
-
-**Current behavior**: `cc_event` logs display as `[ts] [cc_event]` with no useful information — just the event kind.
-
-**New behavior**: In verbose mode, `cc_event` log lines should include meaningful details from the `SDKMessage` payload — whatever fields are available (e.g., message type, tool use, token counts, model, etc.). Keep each line concise (single line), but surface enough information that the log is actually useful for debugging. The implementer should inspect the `SDKMessage` type from `@anthropic-ai/claude-agent-sdk` and decide which fields to extract.
+Two deliverables:
+1. Add **semantic token support** to `attractor-lsp` so Helix and VS Code can color DAG files by semantic role
+2. Create a **minimal VS Code extension** (`packages/attractor-vscode`) that provides syntax coloring, formatting, and a custom file icon for `.dag` files
 
 ---
 
-### 2. Dynamic runtime parallelization
+## Deliverable 1: Semantic Tokens in `attractor-lsp`
 
-**Package**: `attractor`
-**Files**:
-- `packages/attractor/src/handlers/parallel.ts`
-- `packages/attractor/src/validation/rules.ts`
+### Goal
 
-#### DAG syntax
+Emit LSP semantic tokens that visually separate three categories:
+- **Graph-level** — the `digraph` keyword, graph name, `graph`/`node`/`edge` default keywords, graph-level attribute keys and values
+- **Node declarations** — node identifiers, their attribute keys and values, bracket delimiters
+- **Edge/flow declarations** — edge source/target identifiers, `->` arrows, edge attribute keys and values, conditions
 
-```dot
-test_fanout [shape = "component", foreach_key = "test_files", item_key = "test_file", max_parallel = "5"]
-run_test [shape = "box", prompt = "Run test: $item"]
-test_merge [shape = "tripleoctagon"]
+### Approach: Second-Pass Token Classifier
 
-test_fanout -> run_test -> test_merge
+Create a new module `packages/attractor-lsp/src/semantic-tokens.ts` that:
+
+1. Runs the existing **lexer** to get the positioned token stream (`Token[]`)
+2. Walks the token stream with a **lightweight state machine** that tracks syntactic context (are we in a graph attr block? a node declaration? an edge chain?) without building a full AST
+3. Maps each token to an LSP semantic token type + modifiers
+
+This is deliberately separate from the parser to avoid coupling highlighting concerns with graph-model construction.
+
+### State Machine Contexts
+
+The classifier tracks which syntactic region each token belongs to:
+
+| Context | Entered when | Exited when |
+|---------|-------------|-------------|
+| `graph_header` | `DIGRAPH` token seen | `LBRACE` after graph name |
+| `graph_attr` | `GRAPH` keyword followed by `LBRACKET` | matching `RBRACKET` |
+| `node_defaults` | `NODE` keyword followed by `LBRACKET` | matching `RBRACKET` |
+| `edge_defaults` | `EDGE` keyword followed by `LBRACKET` | matching `RBRACKET` |
+| `subgraph` | `SUBGRAPH` keyword | matching `RBRACE` (nesting tracked) |
+| `node_decl` | `IDENTIFIER` at statement start, not followed by `ARROW` | `RBRACKET` or next statement |
+| `edge_chain` | `IDENTIFIER` at statement start, followed by `ARROW` | `RBRACKET` or next statement |
+| `attr_list` | `LBRACKET` within any declaration | matching `RBRACKET` |
+
+Within `attr_list`, the classifier further distinguishes:
+- Attribute **keys** (IDENTIFIER before `=`)
+- Attribute **values** (token after `=`: STRING, INTEGER, FLOAT, DURATION, TRUE, FALSE, IDENTIFIER)
+
+### LSP Semantic Token Type Mapping
+
+Standard LSP token types used (these are well-supported across editors):
+
+| DAG element | LSP token type | LSP modifier | Color intent |
+|------------|----------------|-------------|-------------|
+| `digraph` keyword | `keyword` | `declaration` | Language keyword |
+| Graph name (after `digraph`) | `namespace` | `declaration` | Graph identity |
+| `graph`, `node`, `edge` keywords | `keyword` | — | Defaults keyword |
+| `subgraph` keyword | `keyword` | — | Language keyword |
+| `{`, `}` | Not emitted (left to theme) | — | — |
+| Node identifier (declaration) | `class` | `declaration` | Node identity |
+| Node identifier (in edge chain) | `class` | — | Node reference |
+| `->` arrow | `operator` | — | Flow operator |
+| `[`, `]` | Not emitted | — | — |
+| Attribute key (graph-level) | `property` | `static` | Graph config |
+| Attribute key (node) | `property` | — | Node config |
+| Attribute key (edge) | `property` | `abstract` | Edge config |
+| String value | `string` | — | Value |
+| Numeric value (INTEGER, FLOAT) | `number` | — | Value |
+| Duration value | `number` | `readonly` | Value |
+| Boolean value (TRUE, FALSE) | `keyword` | — | Constant |
+| Condition value (special) | `string` | `abstract` | Conditional |
+| `=` in attributes | Not emitted | — | — |
+| `,` separator | Not emitted | — | — |
+| Comment (// or /* */) | Not emitted (handled pre-lexer) | — | — |
+
+The modifier distinctions (`static` for graph attrs, none for node attrs, `abstract` for edge attrs) allow themes to color attribute keys differently per context, achieving the visual separation goal.
+
+### Server Changes
+
+In `packages/attractor-lsp/src/server.ts`:
+
+1. Import the new `computeSemanticTokens` function
+2. Add to `onInitialize` capabilities:
+   ```
+   semanticTokensProvider: {
+     legend: { tokenTypes: [...], tokenModifiers: [...] },
+     full: true
+   }
+   ```
+3. Add handler: `connection.languages.semanticTokens.on(full)` that calls `computeSemanticTokens(doc)`
+
+### Token Encoding
+
+LSP semantic tokens use a delta-encoded integer array: `[deltaLine, deltaStartChar, length, tokenType, tokenModifiers]` per token. The classifier will produce an intermediate list of `{ line, column, length, type, modifiers }` objects, then encode them into the delta format before returning.
+
+### Error Resilience
+
+If the lexer throws (malformed input), the classifier returns an empty token array. Partial results are acceptable — classify what's possible up to the error point, then stop. The lexer already reports error positions, so the classifier can catch and truncate.
+
+### Tests
+
+Add `packages/attractor-lsp/test/semantic-tokens.test.ts`:
+- Test that a minimal DAG (`digraph G { a -> b }`) produces correct token types
+- Test that node declarations get `class.declaration`, edge references get `class`
+- Test that attribute keys get different modifiers per context (graph vs node vs edge)
+- Test that malformed input returns empty/partial tokens without throwing
+- Test delta encoding correctness
+
+---
+
+## Deliverable 2: VS Code Extension (`packages/attractor-vscode`)
+
+### Package Structure
+
+```
+packages/attractor-vscode/
+  package.json          # Extension manifest
+  tsconfig.json
+  src/
+    extension.ts        # Activate: start LSP client
+  icons/
+    dag-icon.svg        # Custom file icon
+  language-configuration.json
 ```
 
-- `foreach_key` — context key containing a JSON array. Its presence on a `component` node triggers dynamic mode instead of static fanout.
-- `item_key` — context key set per-branch to the current array element (default: `"item"`).
+### package.json (Extension Manifest)
 
-#### Changes to `parallel.ts`
+Key fields:
+- `name`: `attractor-vscode`
+- `displayName`: `Attractor DAG`
+- `publisher`: not set (not published)
+- `engines.vscode`: `^1.85.0`
+- `categories`: `["Programming Languages"]`
+- `main`: `./dist/extension.js`
+- `activationEvents`: `["onLanguage:attractor"]`
 
-Add `executeDynamic()` method to `ParallelHandler`:
+#### Contributes
 
-1. Read `foreach_key` from `node.raw`. If present, enter dynamic mode.
-2. Require exactly one outgoing edge (the template branch). Error if more.
-3. Collect the template sub-chain: walk from the edge target forward, collecting node IDs until hitting a fan-in or terminal node.
-4. Read the list: `JSON.parse(context.get(foreachKey))` — must be an array.
-5. For each item, clone template nodes with suffixed IDs (`{nodeId}__dyn_{i}`), clone internal edges, add edge from parallel node to cloned chain start, add edge from cloned chain end to fan-in. Insert all into `graph.nodes` and `graph.edges`.
-6. For each branch, clone context, set `item_key` to the current item value.
-7. Execute all cloned branches using the existing worker pool pattern.
-8. Aggregate results identically to static mode.
-9. After execution, remove synthetic nodes/edges from the graph (clean up).
+```jsonc
+{
+  "contributes": {
+    "languages": [{
+      "id": "attractor",
+      "aliases": ["Attractor DAG", "dag"],
+      "extensions": [".dag"],
+      "configuration": "./language-configuration.json",
+      "icon": {
+        "light": "./icons/dag-icon.svg",
+        "dark": "./icons/dag-icon.svg"
+      }
+    }],
+    "iconThemes": []  // Not needed — language icon above covers file explorer
+  }
+}
+```
 
-#### Changes to `rules.ts`
+No `grammars` contribution — coloring comes entirely from the LSP semantic tokens.
 
-Add a validation rule: if a node has `foreach_key` in `raw`, warn if it doesn't have shape `component`, warn if it has != 1 outgoing edge.
+#### language-configuration.json
 
-#### Prompt interpolation
+```json
+{
+  "comments": {
+    "lineComment": "//",
+    "blockComment": ["/*", "*/"]
+  },
+  "brackets": [
+    ["{", "}"],
+    ["[", "]"]
+  ],
+  "autoClosingPairs": [
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "\"", "close": "\"", "notIn": ["string"] }
+  ],
+  "surroundingPairs": [
+    ["{", "}"],
+    ["[", "]"],
+    ["\"", "\""]
+  ]
+}
+```
 
-Set `context.{item_key}` on each branch's cloned context so the LLM sees the value naturally. The codergen handler already receives the full context.
+### Extension Entry Point (`src/extension.ts`)
+
+Minimal LSP client setup:
+
+1. Import `vscode-languageclient`
+2. On activate:
+   - Create `LanguageClient` with server command `attractor-lsp --stdio` (assumes on PATH)
+   - Document selector: `{ scheme: "file", language: "attractor" }`
+   - Start the client
+3. On deactivate: stop the client
+
+No custom commands, no custom views, no status bar items. Just wire up the LSP.
+
+### Dependencies
+
+```json
+{
+  "dependencies": {
+    "vscode-languageclient": "^10.0.0-next.14"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.7.0",
+    "esbuild": "^0.25.0",
+    "@vscode/vsce": "^3.0.0"
+  }
+}
+```
+
+### Build
+
+- Use esbuild to bundle `src/extension.ts` into `dist/extension.js` (single file, external `vscode`)
+- Add `package` script: `vsce package --no-dependencies` to produce `.vsix`
+- Add to root `pnpm-workspace.yaml` packages list
+
+### File Icon: Converging Arrows
+
+SVG design for `icons/dag-icon.svg`:
+- 16x16 viewBox
+- Three arrow lines converging from top-left, top-right, and bottom-left toward a central point (bottom-right area)
+- Arrow heads are small filled triangles
+- Stroke color: `#8B5CF6` (purple, visible on both light and dark backgrounds)
+- Stroke width: 1.5, rounded line caps
+- Minimal, geometric, no fills on the paths — just strokes and arrowheads
+- Designed to be legible at 16x16 in VS Code's file explorer
+
+### No TextMate Grammar
+
+The extension deliberately ships no TextMate grammar. Coloring is provided entirely by LSP semantic tokens. This means:
+- If the LSP is not running, `.dag` files appear uncolored (plain text)
+- This is acceptable because formatting and diagnostics also require the LSP
+- Avoids maintaining two separate highlighting systems
 
 ---
 
-### 3. Formatter: preserve up to one blank line of user whitespace
+## Integration Checklist
 
-**Package**: `attractor-lsp`
-**File**: `packages/attractor-lsp/src/formatter.ts`
+- [ ] `pnpm-workspace.yaml` — add `packages/attractor-vscode`
+- [ ] Root `package.json` — no changes needed (recursive scripts already cover all packages)
+- [ ] `attractor-lsp/package.json` — no new dependencies (reuses existing `attractor` lexer)
+- [ ] Helix `languages.toml` — no changes needed (already configured, will pick up semantic tokens automatically once LSP advertises them)
 
-**Current behavior**: The formatter strips all user whitespace and re-sections statements by kind, joining sections with exactly one blank line and items within sections with no blank lines.
+## Order of Implementation
 
-**New behavior**: Continue reordering by kind (graph attrs → graph defaults → node defaults → edge defaults → nodes → edges → subgraphs). But within each section, if two consecutive statements had a blank line between them in the original source, preserve one blank line between them in the output. Multiple consecutive blank lines collapse to one.
-
-#### Changes to CST types
-
-Add `startLine: number` and `endLine: number` to each `CstStmt` variant. The `CstParser` records `this.peek().line` at statement start and the line of the last consumed token at statement end.
-
-#### Changes to `emitBody`
-
-Within each section, when joining consecutive statements, check if `stmt[i+1].startLine - stmt[i].endLine >= 2`. If so, emit `"\n\n"` (one blank line); otherwise emit `"\n"`.
-
----
-
-### 4. Formatter: vertical alignment
-
-**Package**: `attractor-lsp`
-**File**: `packages/attractor-lsp/src/formatter.ts`
-
-**Scope**: Alignment applies only within "alignment blocks" — runs of consecutive same-section statements with no blank line between them (using the boundaries from change 3).
-
-#### Node declaration alignment
-
-For a block of `NodeDecl` statements:
-- Compute `maxIdLen` = max `emitId(n.id).length` across the block.
-- Pad each ID to `maxIdLen` before appending ` [attrs]`.
-- Within `[attrs]`, align `=` signs: compute `maxKeyLen` per attribute position across the block, pad keys accordingly.
-
-#### Edge chain alignment
-
-For a block of `EdgeChain` statements:
-- For each arrow column `c` (0-indexed), compute `maxNodeLen[c]` = max length of the node ID at position `c` across all edges that have at least `c+1` nodes.
-- Pad each node ID at position `c` to `maxNodeLen[c]`, aligning all `->` arrows.
-- After the chain, align the `[` bracket: compute max total chain width across the block, pad to that before `[attrs]`.
-- Within attrs, align `=` signs like nodes.
-
-#### Graph attribute alignment
-
-For a block of `GraphAttr` statements:
-- Compute `maxKeyLen`, pad keys so `=` signs align.
-
-#### Defaults alignment
-
-For a block of `DefaultsStmt` statements:
-- Align the `[` bracket across the block.
-
----
-
-## Implementation order
-
-1. Change 1 (parallel visibility) — small, self-contained CLI change
-2. Change 3 (formatter whitespace) — prerequisite for change 4
-3. Change 4 (formatter alignment) — depends on blank-line block boundaries from change 3
-4. Change 2 (dynamic parallel) — largest change, independent of 1/3/4
-
-## Verification
-
-1. **Parallel visibility**: Run a flow with parallel branches, confirm events appear in default output
-2. **Formatter whitespace**: Format a `.dag` with intentional blank lines within node/edge sections, verify preserved (max 1)
-3. **Formatter alignment**: Format `sprint.dag`, verify node IDs align `[` brackets, edge chains align `->` arrows
-4. **Dynamic parallel**: Write a test `.dag` with `foreach_key`, verify branches spawn per array item
-5. **Existing tests**: `pnpm test` in both packages, no regressions
+1. Semantic tokens module (`semantic-tokens.ts`) + tests
+2. Wire into LSP server (`server.ts` capability + handler)
+3. Verify in Helix (restart editor, confirm colors)
+4. Create VS Code extension package scaffold
+5. Extension entry point (LSP client wiring)
+6. SVG icon
+7. Build + produce `.vsix`
+8. Install and verify in VS Code
