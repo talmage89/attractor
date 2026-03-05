@@ -111,6 +111,15 @@ describe("LSP server integration", () => {
       // textDocumentSync: Full = 1
       expect(caps.textDocumentSync).toBe(1);
       expect(caps.documentFormattingProvider).toBe(true);
+
+      // Semantic tokens capability is advertised
+      const stp = caps.semanticTokensProvider as Record<string, unknown>;
+      expect(stp).toBeDefined();
+      expect(stp.full).toBe(true);
+      const legend = stp.legend as Record<string, unknown>;
+      expect(Array.isArray(legend.tokenTypes)).toBe(true);
+      expect((legend.tokenTypes as string[]).length).toBeGreaterThan(0);
+      expect(Array.isArray(legend.tokenModifiers)).toBe(true);
     },
     10000,
   );
