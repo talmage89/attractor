@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none">
+  <!-- Three arrows converging toward bottom-right -->
+  <!-- Arrow 1: top-left to center-right -->
+  <line x1="1" y1="2" x2="12" y2="10" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+  <polygon points="12,10 10,8.5 11.5,12" fill="#8B5CF6"/>
+  <!-- Arrow 2: top-right to center-right -->
+  <line x1="14" y1="2" x2="12" y2="10" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Arrow 3: bottom-left to center-right -->
+  <line x1="1" y1="14" x2="12" y2="10" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

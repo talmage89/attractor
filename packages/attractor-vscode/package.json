@@ -1,0 +1,44 @@
+{
+  "name": "attractor-vscode",
+  "displayName": "Attractor DAG",
+  "description": "Language support for Attractor DAG pipeline files",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:attractor"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "attractor",
+        "aliases": ["Attractor DAG", "dag"],
+        "extensions": [".dag"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/dag-icon.svg",
+          "dark": "./icons/dag-icon.svg"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --platform=node --external:vscode --format=cjs",
+    "package": "vsce package --no-dependencies",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^10.0.0-next.14"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}
