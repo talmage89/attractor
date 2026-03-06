@@ -1,0 +1,10 @@
+{
+  "status": "success",
+  "contextUpdates": {
+    "files_changed": "packages/attractor-lsp/src/semantic-tokens.ts, packages/attractor-lsp/test/semantic-tokens.test.ts",
+    "bugs_fixed": "FINDING-001: quoted duration values now classified as number+readonly",
+    "test_count": "515"
+  },
+  "notes": "Fixed quoted timeout=\"30s\" misclassified as string; added duration-pattern check in parseAttrList; 2 new tests; 515 pass, pushed.",
+  "costUsd": 0.8107775000000002
+}

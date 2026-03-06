@@ -1,0 +1,9 @@
+{
+  "status": "success",
+  "contextUpdates": {
+    "outcome": "success",
+    "bugs_found": "0"
+  },
+  "notes": "85 integration tests pass. LSP capability, manifest, language-config, extension.ts, error resilience all verified. No bugs found.",
+  "costUsd": 1.2679825
+}
