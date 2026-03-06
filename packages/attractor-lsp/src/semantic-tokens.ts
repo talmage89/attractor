@@ -95,14 +95,15 @@ export function computeSemanticTokens(text: string): number[] {
     });
   }
 
-  // Lookahead: returns true if there is an ARROW before LBRACKET/RBRACE/SEMICOLON/EOF
+  // Lookahead: returns true if there is an ARROW before LBRACKET/RBRACE/SEMICOLON/EQUALS/EOF
   // starting at index `from`. LBRACKET terminates scan because an attr list on a node
-  // comes before any arrow in that statement.
+  // comes before any arrow in that statement. EQUALS terminates scan because it means
+  // the current identifier is an attribute key (e.g. `label="…"`), not an edge source.
   function hasArrowAhead(from: number): boolean {
     for (let j = from; j < tokens.length; j++) {
       const k = tokens[j].kind as TokenKind;
       if (k === "ARROW") return true;
-      if (k === "LBRACKET" || k === "RBRACE" || k === "SEMICOLON" || k === "EOF") return false;
+      if (k === "LBRACKET" || k === "RBRACE" || k === "SEMICOLON" || k === "EQUALS" || k === "EOF") return false;
     }
     return false;
   }
@@ -268,9 +269,19 @@ export function computeSemanticTokens(text: string): number[] {
             }
           }
         } else {
-          // Node declaration: id [attrs]
+          // Node declaration or bare key=value assignment (e.g. `label="Test"`).
+          // If the next token is EQUALS, consume the = and its value so they are
+          // not left in the stream to be misinterpreted as a subsequent edge source.
           consume();
           emit(tok, "class", modBits("declaration")); // node id — class + declaration
+
+          if (tokens[i]?.kind === "EQUALS") {
+            consume(); // EQUALS — not emitted
+            const valTok = tokens[i];
+            if (valTok && valTok.kind !== "RBRACE" && valTok.kind !== "SEMICOLON" && valTok.kind !== "EOF") {
+              consume(); // value — not emitted
+            }
+          }
 
           while (tokens[i]?.kind === "LBRACKET") {
             parseAttrList("node_decl");

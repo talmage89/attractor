@@ -306,6 +306,65 @@ describe("computeSemanticTokens", () => {
     });
   });
 
+  describe("bare attribute assignments before edge statements (BUG-001)", () => {
+    // Bare key=value assignments at graph/subgraph body level (e.g. `label="Test"`,
+    // `goal="test"`) are treated by the classifier as node declarations (class+declaration)
+    // because there is no dedicated bare-assignment path. This is cosmetically imperfect
+    // but harmless. The critical behaviour being tested here is that `hasArrowAhead()`
+    // stops at EQUALS, so the EDGE SOURCE on the next line is NOT silently dropped.
+
+    it("bare assignment in subgraph body — edge source n1 is not dropped", () => {
+      const src = 'digraph G {\n  subgraph {\n    label="Test"\n    n1 -> n2\n  }\n}';
+      const data = computeSemanticTokens(src);
+      // Tokens: digraph(kw+decl), G(ns+decl), subgraph(kw),
+      //         label(class+decl — bare assignment treated as node decl),
+      //         n1(class), ->(op), n2(class)
+      // Note: string value "Test" after = is consumed without being emitted.
+      expect(count(data)).toBe(7);
+
+      // "label" is NOT classified as an edge source (no modifiers); it gets declaration
+      const labelTok = token(data, 3);
+      expect(labelTok.type).toBe(T.class);
+      expect(labelTok.modifiers).toBe(M.declaration);
+      expect(labelTok.length).toBe(5); // "label"
+
+      // "n1" must appear — the core bug was that it was silently dropped
+      const n1Tok = token(data, 4);
+      expect(n1Tok.type).toBe(T.class);
+      expect(n1Tok.modifiers).toBe(0);
+      expect(n1Tok.length).toBe(2); // "n1"
+
+      // "->" operator
+      expect(token(data, 5).type).toBe(T.operator);
+
+      // "n2" target
+      expect(token(data, 6).type).toBe(T.class);
+    });
+
+    it("bare assignment at top-level body — edge source a is not dropped", () => {
+      const src = 'digraph G {\n  goal="test"\n  a -> b\n}';
+      const data = computeSemanticTokens(src);
+      // Tokens: digraph(kw+decl), G(ns+decl), goal(class+decl), a(class), ->(op), b(class)
+      // Note: string value "test" after = is consumed without being emitted.
+      expect(count(data)).toBe(6);
+
+      // "goal" is NOT classified as an edge source
+      const goalTok = token(data, 2);
+      expect(goalTok.type).toBe(T.class);
+      expect(goalTok.modifiers).toBe(M.declaration);
+      expect(goalTok.length).toBe(4); // "goal"
+
+      // "a" must appear — the core bug was that it was silently dropped
+      const aTok = token(data, 3);
+      expect(aTok.type).toBe(T.class);
+      expect(aTok.modifiers).toBe(0);
+      expect(aTok.length).toBe(1); // "a"
+
+      expect(token(data, 4).type).toBe(T.operator); // "->"
+      expect(token(data, 5).type).toBe(T.class);    // "b"
+    });
+  });
+
   describe("graph / node / edge keywords in body", () => {
     it("graph keyword in body gets keyword type with no modifier", () => {
       const data = computeSemanticTokens('digraph G { graph [goal = "x"] }');
