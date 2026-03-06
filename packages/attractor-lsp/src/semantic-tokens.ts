@@ -145,7 +145,12 @@ export function computeSemanticTokens(text: string): number[] {
           } else {
             switch (valTok.kind) {
               case "STRING":
-                emit(valTok, "string");
+                // Quoted duration strings (e.g. timeout="30s") get number+readonly like unquoted DURATION tokens
+                if (keyName === "timeout" && /^-?\d+(\.\d+)?(ms|s|m|h|d)$/.test(valTok.value)) {
+                  emit(valTok, "number", modifierBit("readonly"));
+                } else {
+                  emit(valTok, "string");
+                }
                 break;
               case "INTEGER":
               case "FLOAT":

@@ -184,6 +184,22 @@ describe("computeSemanticTokens", () => {
       expect(valToken.length).toBe(3); // "30s"
     });
 
+    it("quoted duration value gets number + readonly modifier", () => {
+      const data = computeSemanticTokens('digraph G { a [timeout = "30s"] }');
+      // digraph, G, a, timeout, "30s"
+      const valToken = token(data, 4);
+      expect(valToken.type).toBe(T.number);
+      expect(valToken.modifiers).toBe(M.readonly);
+      expect(valToken.length).toBe(5); // "30s" including quotes
+    });
+
+    it("quoted non-duration string for timeout key gets string type", () => {
+      const data = computeSemanticTokens('digraph G { a [timeout = "invalid"] }');
+      const valToken = token(data, 4);
+      expect(valToken.type).toBe(T.string);
+      expect(valToken.modifiers).toBe(0);
+    });
+
     it("boolean true value gets keyword type", () => {
       const data = computeSemanticTokens("digraph G { a [goal_gate = true] }");
       const valToken = token(data, 4);
