@@ -724,6 +724,24 @@ describe("parseStatusFile", () => {
     expect(outcome.suggestedNextIds).toEqual(["node-a", "node-b"]);
   });
 
+  it("treats empty suggested_next_ids as undefined to avoid halting traversal", () => {
+    const data = {
+      outcome: "success",
+      suggested_next_ids: [],
+    };
+    const outcome = parseStatusFile(data, "test");
+    expect(outcome.suggestedNextIds).toBeUndefined();
+  });
+
+  it("treats suggested_next_ids with only non-strings as undefined", () => {
+    const data = {
+      outcome: "success",
+      suggested_next_ids: [42, null, true],
+    };
+    const outcome = parseStatusFile(data, "test");
+    expect(outcome.suggestedNextIds).toBeUndefined();
+  });
+
   it("includes all-string suggested_next_ids unchanged", () => {
     const data = {
       outcome: "success",

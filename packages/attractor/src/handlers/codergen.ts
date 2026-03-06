@@ -101,9 +101,15 @@ export function parseStatusFile(data: unknown, nodeId: string): Outcome {
   }
 
   if (Array.isArray(obj.suggested_next_ids)) {
-    result.suggestedNextIds = (obj.suggested_next_ids as unknown[]).filter(
+    const ids = (obj.suggested_next_ids as unknown[]).filter(
       (x) => typeof x === "string"
     ) as string[];
+    // Only set suggestedNextIds when the LLM actually provided IDs.
+    // An empty array is a "stop traversal" sentinel used by internal handlers
+    // (e.g. ParallelHandler) — LLM-authored status.json should not trigger it.
+    if (ids.length > 0) {
+      result.suggestedNextIds = ids;
+    }
   }
 
   if (obj.context_updates && typeof obj.context_updates === "object") {
