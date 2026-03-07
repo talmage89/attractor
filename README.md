@@ -4,6 +4,16 @@ A TypeScript DAG pipeline execution engine that orchestrates multi-step AI codin
 
 Define pipelines as `.dag` graphs, and Attractor handles the rest: parsing, validation, execution, branching, retries, checkpointing, and human-in-the-loop interaction.
 
+## Packages
+
+This is a monorepo with three packages:
+
+| Package | Description |
+|---|---|
+| [`attractor`](packages/attractor) | Core engine — DAG parser, validator, runner, CLI |
+| [`attractor-lsp`](packages/attractor-lsp) | Language server — diagnostics, formatting, semantic tokens |
+| [`attractor-vscode`](packages/attractor-vscode) | VS Code extension — language registration, LSP client, file icon |
+
 ## How It Works
 
 Pipelines are directed graphs written in `.dag` files, a subset of the [DOT language](https://graphviz.org/doc/info/lang.html). Each node represents a stage — an AI coding task, a shell command, a decision point, or a prompt for human input. Edges define transitions between stages, optionally guarded by conditions.
@@ -23,6 +33,17 @@ digraph G {
 ```
 
 Attractor parses this graph, validates it, and executes each node in order — sending `codergen` prompts to Claude Code, running `tool` commands in a shell, routing through `conditional` branches based on outcomes, and pausing at `wait.human` nodes for user input.
+
+### Example: Sprint Pipeline
+
+The [`sprint.dag`](.attractor/flows/sprint.dag) pipeline demonstrates a real-world workflow — plan, audit, implement, review, test (with 3 parallel agents), fix, and wrap up. Conditional edges create retry loops: review failures re-enter implementation, test failures route to a fix node that loops back to testing.
+
+In its latest run (2026-03-06), the sprint pipeline:
+- Executed 20 node visits across 10 distinct nodes
+- Looped through implement/review twice before passing review
+- Ran 3 rounds of parallel testing (3 agents each), finding and fixing 2 bugs mid-run
+- Delivered a semantic token classifier and VS Code extension
+- Finished with 515 tests passing at a total cost of ~$7.75 USD
 
 ## Installation
 
@@ -58,7 +79,7 @@ attractor visualize pipeline.dag > pipeline.svg
 | `--resume <path>` | Resume from a checkpoint file |
 | `--auto-approve` | Skip human prompts (auto-select first option) |
 | `--permission-mode <mode>` | CC permission mode: `default`, `acceptEdits`, `bypassPermissions` |
-| `--verbose` | Show all events including edge selections |
+| `--verbose` | Show all events including edge selections and CC agent details |
 
 ### Programmatic API
 
@@ -103,8 +124,8 @@ Nodes are identified by their `shape` attribute:
 | `invhouse` | **tool** | Runs a shell command specified by `tool_command`. |
 | `diamond` | **conditional** | Routes to an outgoing edge based on the previous outcome. |
 | `hexagon` | **wait.human** | Presents a question to the user and routes based on their choice. |
-| `parallelogram` | **parallel** | Fans out to multiple branches concurrently. |
-| `trapezium` | **parallel.fan_in** | Joins parallel branches and selects the best outcome. |
+| `component` | **parallel** | Fans out to multiple branches concurrently. |
+| `tripleoctagon` | **parallel.fan_in** | Joins parallel branches and selects the best outcome. |
 
 ## Pipeline Features
 
@@ -143,21 +164,37 @@ The graph-level `goal_gate` attribute defines a condition checked at the exit no
 graph [goal="Ship feature", goal_gate="context.tests_pass=true", goal_gate_max="3"]
 ```
 
-### Parallel Execution
+### Static Parallel Execution
 
-Fan out to multiple branches and collect results:
+Fan out to named branches and collect results:
 
 ```dot
-parallel_start [shape=parallelogram, max_parallel="2", join_policy="wait_all"]
-branch_a [shape=box, prompt="Approach A"]
-branch_b [shape=box, prompt="Approach B"]
-merge [shape=trapezium]
+test_fanout [shape=component, max_parallel="3"]
+test_a      [shape=box, prompt="Test approach A"]
+test_b      [shape=box, prompt="Test approach B"]
+test_c      [shape=box, prompt="Test approach C"]
+test_merge  [shape=tripleoctagon]
 
-parallel_start -> branch_a -> merge
-parallel_start -> branch_b -> merge
+test_fanout -> test_a -> test_merge
+test_fanout -> test_b -> test_merge
+test_fanout -> test_c -> test_merge
 ```
 
 Join policies: `wait_all` (all must succeed) or `first_success` (any success is sufficient).
+
+### Dynamic Parallel Execution
+
+Spawn branches at runtime from a context array using `foreach_key`:
+
+```dot
+fanout   [shape=component, foreach_key="test_files", item_key="test_file", max_parallel="4"]
+run_test [shape=box, tool_command="pytest $test_file"]
+merge    [shape=tripleoctagon]
+
+fanout -> run_test -> merge
+```
+
+At runtime, `context.test_files` must contain a JSON array. The engine clones the template chain once per item, setting `context.test_file` in each branch.
 
 ### Human-in-the-Loop
 
@@ -215,7 +252,7 @@ graph [model_stylesheet="* { llm_model: sonnet } .critical { llm_model: opus }"]
 Execution state is saved to `checkpoint.json` after each node completes. If a run crashes, resume it:
 
 ```bash
-attractor run pipeline.dag --resume .attractor/runs/2026-03-02T10-30-00-000Z/checkpoint.json
+attractor run pipeline.dag --resume .attractor/runs/2026-03-06T02-08-56-243Z/checkpoint.json
 ```
 
 ### Variable Expansion
@@ -227,40 +264,84 @@ graph [goal="Add dark mode"]
 plan [shape=box, prompt="Create a plan to: $goal"]
 ```
 
+## Language Server (`attractor-lsp`)
+
+The language server provides IDE support for `.dag` files:
+
+- **Diagnostics** — real-time validation errors and warnings as you type
+- **Formatting** — opinionated formatter with vertical alignment and blank-line preservation
+- **Semantic tokens** — syntax coloring by role (graph keywords, node declarations, edge chains, attribute keys/values per context)
+
+The semantic token classifier uses a lightweight state machine over the lexer output, independent of the parser. Attribute keys carry context-specific modifiers (`property.static` for graph-level, `property` for node-level, `property.abstract` for edge-level), enabling themes to distinguish them.
+
+### Editor Support
+
+**Helix**: No configuration needed beyond LSP registration — semantic tokens are requested automatically.
+
+**VS Code**: Install the `attractor-vscode` extension (see below).
+
+**Any LSP client**: The server responds to `textDocument/publishDiagnostics`, `textDocument/formatting`, and `textDocument/semanticTokens/full`.
+
+## VS Code Extension (`attractor-vscode`)
+
+A minimal VS Code extension that:
+- Registers `.dag` as the `attractor` language
+- Starts the `attractor-lsp` language server via stdio
+- Provides bracket matching, auto-close, and comment toggling
+- Shows a custom file icon (purple converging arrows) in the file explorer
+
+No TextMate grammar is shipped — all syntax coloring comes from LSP semantic tokens.
+
+```bash
+cd packages/attractor-vscode && pnpm run package
+code --install-extension attractor-vscode-*.vsix
+```
+
 ## Project Structure
 
 ```
-src/
-  parser/         DOT lexer and parser
-  model/          Graph, Outcome, Context, Checkpoint, Event types
-  validation/     13 lint rules and diagnostic reporting
-  engine/         Runner, edge selection, retry logic, transforms
-  handlers/       Node type handlers (start, exit, codergen, tool, etc.)
-  backend/        Claude Code Agent SDK wrapper and session management
-  interviewer/    Human interaction (console, auto-approve, queue)
-  stylesheet/     Model stylesheet parser and applicator
-  conditions/     Condition expression parser and evaluator
-  cli.ts          CLI entry point
-  index.ts        Public API exports
+packages/
+  attractor/            Core engine
+    src/
+      parser/           DOT lexer and parser
+      model/            Graph, Outcome, Context, Checkpoint, Event types
+      validation/       13 lint rules and diagnostic reporting
+      engine/           Runner, edge selection, retry logic, transforms
+      handlers/         Node type handlers (start, exit, codergen, tool, etc.)
+      backend/          Claude Code Agent SDK wrapper and session management
+      interviewer/      Human interaction (console, auto-approve, queue)
+      stylesheet/       Model stylesheet parser and applicator
+      conditions/       Condition expression parser and evaluator
+      cli.ts            CLI entry point
+      index.ts          Public API exports
+  attractor-lsp/        Language server
+    src/
+      server.ts         LSP server (diagnostics, formatting, semantic tokens)
+      formatter.ts      DAG formatter with alignment and blank-line preservation
+      semantic-tokens.ts  Semantic token classifier (state machine over lexer)
+  attractor-vscode/     VS Code extension
+    src/
+      extension.ts      LSP client activation
+    icons/
+      dag-icon.svg      File icon
 ```
 
 ## Development
 
 ```bash
-pnpm test              # Run tests
+pnpm test              # Run all tests (515: 442 attractor + 73 attractor-lsp)
 pnpm run test:watch    # Watch mode
 pnpm run build         # Compile TypeScript
 pnpm run typecheck     # Type-check without emitting
 ```
 
-The test suite covers parsing, validation, edge selection, transforms, handlers, state management, and end-to-end pipeline execution.
-
 ## Dependencies
 
-- **[`@anthropic-ai/claude-agent-sdk`](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)** — Claude Code Agent integration (sole runtime dependency)
+- **[`@anthropic-ai/claude-agent-sdk`](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)** — Claude Code Agent integration (sole runtime dependency for `attractor`)
+- **[`vscode-languageserver`](https://www.npmjs.com/package/vscode-languageserver)** / **[`vscode-languageclient`](https://www.npmjs.com/package/vscode-languageclient)** — LSP protocol (for `attractor-lsp` and `attractor-vscode`)
 - TypeScript 5.7, Vitest 3.0, Node.js (ES2022)
 
-Everything else — the DOT parser, stylesheet engine, condition evaluator, and CLI — is implemented from scratch with zero additional runtime dependencies.
+The DOT parser, stylesheet engine, condition evaluator, formatter, semantic token classifier, and CLI are all implemented from scratch with zero additional runtime dependencies.
 
 ## License
 
