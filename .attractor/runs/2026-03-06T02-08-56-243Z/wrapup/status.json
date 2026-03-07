@@ -1,9 +1,10 @@
 {
-  "outcome": "success",
-  "context_updates": {
+  "status": "success",
+  "contextUpdates": {
     "summary_path": ".attractor/runs/2026-03-06T02-08-56-243Z/wrapup/summary.md",
     "test_count": "515",
     "files_committed": ".attractor/runs/2026-03-06T02-08-56-243Z/"
   },
-  "notes": "Build/typecheck/515 tests green. Summary written. Scratch files cleaned. plan.md untracked from git. Committing run logs."
+  "notes": "Build/typecheck/515 tests green. Summary written. Scratch files cleaned. plan.md untracked from git. Committing run logs.",
+  "costUsd": 0.6675357499999999
 }
