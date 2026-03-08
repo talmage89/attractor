@@ -557,6 +557,35 @@ describe("cmdRun", () => {
     expect(stderrOutput).not.toContain("No previous runs found");
     expect(exitCode).not.toBe(3);
   });
+
+  it("default logsRoot is written under --cwd directory, not process.cwd()", async () => {
+    // Create a project dir separate from process.cwd().
+    const projectDir = path.join(tmpDir, "myproject");
+    await fs.mkdir(projectDir, { recursive: true });
+
+    const dotfile = path.join(projectDir, "test.dag");
+    await fs.writeFile(dotfile, VALID_PIPELINE);
+
+    // Run WITHOUT --logs so that the default logsRoot is used.
+    // The pipeline exits 0 (start→exit), so a checkpoint will be written.
+    let exitCode: number | undefined;
+    try {
+      await cmdRun([dotfile, "--cwd", projectDir]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    expect(exitCode).toBe(0);
+
+    // Checkpoint must be under projectDir/.attractor/runs/, NOT under tmpDir/.attractor/runs/.
+    const projectRuns = path.join(projectDir, ".attractor", "runs");
+    const callerRuns = path.join(tmpDir, ".attractor", "runs");
+
+    const projectEntries = await fs.readdir(projectRuns).catch(() => []);
+    const callerEntries = await fs.readdir(callerRuns).catch(() => []);
+
+    expect(projectEntries.length).toBeGreaterThan(0); // checkpoint in project dir
+    expect(callerEntries.length).toBe(0);             // nothing in caller dir
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -195,7 +195,7 @@ export async function cmdRun(args: string[]): Promise<void> {
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const logsRoot = (values.logs as string | undefined) ?? path.join(".attractor", "runs", timestamp);
+  const logsRoot = (values.logs as string | undefined) ?? path.join(workingCwd, ".attractor", "runs", timestamp);
 
   const interviewer = (values["auto-approve"] as boolean)
     ? new AutoApproveInterviewer()
