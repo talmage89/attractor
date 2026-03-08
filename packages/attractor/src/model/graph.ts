@@ -22,6 +22,8 @@ export interface GraphAttributes {
   fallbackRetryTarget: string;
   defaultFidelity: string;
   defaultTimeout: number | null;
+  watchdogIdle: number | null;
+  watchdogPoll: number | null;
   raw: Map<string, string>;
 }
 

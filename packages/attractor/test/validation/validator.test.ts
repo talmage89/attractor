@@ -41,6 +41,8 @@ function makeGraph(nodeList: GraphNode[], edgeList: Edge[] = []): Graph {
       fallbackRetryTarget: "",
       defaultFidelity: "",
       defaultTimeout: null,
+      watchdogIdle: null,
+      watchdogPoll: null,
       raw: new Map(),
     },
     nodes: new Map(nodeList.map((n) => [n.id, n])),
@@ -1173,6 +1175,146 @@ describe("validation", () => {
       const diags = validate(graph);
       const warnings = diags.filter(d => d.rule === "foreach_key_valid");
       expect(warnings).toHaveLength(0);
+    });
+  });
+
+  describe("watchdogPollWithoutIdleRule", () => {
+    it("warns when watchdog_poll is set without watchdog_idle", () => {
+      const graph = parse(`
+        digraph G {
+          watchdog_poll = "30s"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "watchdog_poll_without_idle");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("no effect without watchdog_idle");
+    });
+
+    it("does not warn when watchdog_poll and watchdog_idle are both set", () => {
+      const graph = parse(`
+        digraph G {
+          watchdog_idle = "5m"
+          watchdog_poll = "30s"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "watchdog_poll_without_idle");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not warn when neither watchdog attribute is set", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "watchdog_poll_without_idle");
+      expect(rule).toHaveLength(0);
+    });
+  });
+
+  describe("watchdogIdleShorterThanPollRule", () => {
+    it("warns when watchdog_idle < watchdog_poll", () => {
+      const graph = parse(`
+        digraph G {
+          watchdog_idle = "10s"
+          watchdog_poll = "30s"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "watchdog_idle_shorter_than_poll");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("shorter than poll interval");
+    });
+
+    it("does not warn when watchdog_idle >= watchdog_poll", () => {
+      const graph = parse(`
+        digraph G {
+          watchdog_idle = "5m"
+          watchdog_poll = "30s"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "watchdog_idle_shorter_than_poll");
+      expect(rule).toHaveLength(0);
+    });
+  });
+
+  describe("invalidWatchdogIdleRule", () => {
+    it("errors when watchdog_idle is zero", () => {
+      const graph = parse(`
+        digraph G {
+          watchdog_idle = "0s"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_watchdog_idle");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("error");
+      expect(rule[0].message).toContain("positive duration");
+    });
+
+    it("errors when watchdog_idle is negative", () => {
+      const graph = parse(`
+        digraph G {
+          watchdog_idle = "-1m"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_watchdog_idle");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("error");
+    });
+
+    it("does not error when watchdog_idle is positive", () => {
+      const graph = parse(`
+        digraph G {
+          watchdog_idle = "5m"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_watchdog_idle");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not error when watchdog_idle is absent", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_watchdog_idle");
+      expect(rule).toHaveLength(0);
     });
   });
 });

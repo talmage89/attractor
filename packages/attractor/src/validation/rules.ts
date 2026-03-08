@@ -398,6 +398,49 @@ function invalidDefaultTimeoutRule(graph: Graph): Diagnostic[] {
   return [];
 }
 
+function watchdogPollWithoutIdleRule(graph: Graph): Diagnostic[] {
+  if (graph.attributes.raw.has("watchdog_poll") && !graph.attributes.raw.has("watchdog_idle")) {
+    return [
+      {
+        rule: "watchdog_poll_without_idle",
+        severity: "warning",
+        message: "watchdog_poll has no effect without watchdog_idle",
+      },
+    ];
+  }
+  return [];
+}
+
+function watchdogIdleShorterThanPollRule(graph: Graph): Diagnostic[] {
+  const { watchdogIdle, watchdogPoll } = graph.attributes;
+  if (watchdogIdle !== null && watchdogPoll !== null && watchdogIdle < watchdogPoll) {
+    return [
+      {
+        rule: "watchdog_idle_shorter_than_poll",
+        severity: "warning",
+        message: "watchdog_idle shorter than poll interval; idle nodes may not be detected promptly",
+      },
+    ];
+  }
+  return [];
+}
+
+function invalidWatchdogIdleRule(graph: Graph): Diagnostic[] {
+  const raw = graph.attributes.raw.get("watchdog_idle");
+  if (raw === undefined) return [];
+  const value = graph.attributes.watchdogIdle;
+  if (value !== null && value <= 0) {
+    return [
+      {
+        rule: "invalid_watchdog_idle",
+        severity: "error",
+        message: "watchdog_idle must be a positive duration",
+      },
+    ];
+  }
+  return [];
+}
+
 function promptFileOnNonCodergenRule(graph: Graph): Diagnostic[] {
   const diags: Diagnostic[] = [];
   for (const node of graph.nodes.values()) {
@@ -501,4 +544,7 @@ export const BUILT_IN_RULES: LintRule[] = [
   promptFileOnNonCodergenRule,
   promptAndPromptFileConflictRule,
   promptFileNotFoundRule,
+  watchdogPollWithoutIdleRule,
+  watchdogIdleShorterThanPollRule,
+  invalidWatchdogIdleRule,
 ];

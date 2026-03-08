@@ -45,6 +45,8 @@ function defaultGraphAttributes(): GraphAttributes {
     fallbackRetryTarget: "",
     defaultFidelity: "",
     defaultTimeout: null,
+    watchdogIdle: null,
+    watchdogPoll: null,
     raw: new Map(),
   };
 }
@@ -575,6 +577,20 @@ class Parser {
         const parsed = this.parseTimeout(value);
         if (parsed !== null) {
           this.graph.attributes.defaultTimeout = parsed;
+        }
+        break;
+      }
+      case "watchdog_idle": {
+        const parsed = this.parseTimeout(value);
+        if (parsed !== null) {
+          this.graph.attributes.watchdogIdle = parsed;
+        }
+        break;
+      }
+      case "watchdog_poll": {
+        const parsed = this.parseTimeout(value);
+        if (parsed !== null) {
+          this.graph.attributes.watchdogPoll = parsed;
         }
         break;
       }

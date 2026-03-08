@@ -420,6 +420,45 @@ describe("parser", () => {
     });
   });
 
+  describe("watchdog attribute parsing", () => {
+    it("parses watchdog_idle in minutes", () => {
+      const graph = parse(`
+        digraph G {
+          watchdog_idle = "5m"
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      expect(graph.attributes.watchdogIdle).toBe(300_000); // 5 * 60000
+    });
+
+    it("parses watchdog_poll in seconds", () => {
+      const graph = parse(`
+        digraph G {
+          watchdog_idle = "5m"
+          watchdog_poll = "30s"
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      expect(graph.attributes.watchdogPoll).toBe(30_000);
+    });
+
+    it("defaults watchdogIdle and watchdogPoll to null when not set", () => {
+      const graph = parse(`
+        digraph G {
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      expect(graph.attributes.watchdogIdle).toBeNull();
+      expect(graph.attributes.watchdogPoll).toBeNull();
+    });
+  });
+
   describe("prompt_file parsing", () => {
     it("parses prompt_file attribute on a node", () => {
       const graph = parse(`
