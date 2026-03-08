@@ -11,6 +11,8 @@ export interface CCBackendOptions {
   systemPromptAppend?: string;
   timeout?: number;
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions";
+  /** External abort signal (e.g. from watchdog); combined with the internal timeout signal. */
+  abortSignal?: AbortSignal;
 }
 
 export interface CCResult {
@@ -34,6 +36,15 @@ export async function runCC(
 
   if (options.timeout !== undefined && options.timeout > 0) {
     timeoutHandle = setTimeout(() => abortController.abort(), options.timeout);
+  }
+
+  // Combine external abort signal (e.g. watchdog) with internal timeout controller.
+  if (options.abortSignal) {
+    if (options.abortSignal.aborted) {
+      abortController.abort();
+    } else {
+      options.abortSignal.addEventListener("abort", () => abortController.abort(), { once: true });
+    }
   }
 
   const startTime = Date.now();

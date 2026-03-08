@@ -1383,4 +1383,157 @@ describe("execution engine", () => {
     expect(result.status).toBe("fail");
     expect(callLog).not.toContain("proc");
   });
+
+  // ── Watchdog integration ──────────────────────────────────────────────────
+
+  it("watchdog: does not activate when watchdog_idle is not set", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="No watchdog"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a -> e
+      }
+    `);
+
+    const events: PipelineEvent[] = [];
+    // Confirm that no abortSignal is set on handler config when watchdog_idle is absent
+    let capturedAbortSignal: AbortSignal | undefined = undefined;
+    const registry = new HandlerRegistry({
+      async execute(_node: any, _ctx: any, _graph: any, config: any): Promise<Outcome> {
+        capturedAbortSignal = config.abortSignal;
+        return { status: "success" };
+      },
+    });
+
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+      onEvent: (e) => events.push(e),
+    });
+
+    expect(capturedAbortSignal).toBeUndefined();
+    // No warning events about watchdog
+    const warnings = events.filter(e => e.kind === "warning" && (e as any).message?.includes("Watchdog"));
+    expect(warnings).toHaveLength(0);
+  });
+
+  it("watchdog: passes abortSignal to handler config when watchdog_idle is set", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Watchdog active", watchdog_idle="5m", watchdog_poll="1s"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a -> e
+      }
+    `);
+
+    let capturedAbortSignal: AbortSignal | undefined = undefined;
+    const registry = new HandlerRegistry({
+      async execute(_node: any, _ctx: any, _graph: any, config: any): Promise<Outcome> {
+        capturedAbortSignal = config.abortSignal;
+        return { status: "success" };
+      },
+    });
+
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    expect(capturedAbortSignal).toBeDefined();
+    expect(capturedAbortSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedAbortSignal!.aborted).toBe(false);
+  });
+
+  it("watchdog: emits warning and aborts signal when node is idle too long", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Watchdog kill", watchdog_idle="100", watchdog_poll="50"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a -> e
+      }
+    `);
+
+    const events: PipelineEvent[] = [];
+    // Track whether the abort signal fired during node "a" execution
+    let abortFiredDuringA = false;
+    const registry = new HandlerRegistry({
+      async execute(_node: any, _ctx: any, _graph: any, config: any): Promise<Outcome> {
+        if (_node.id === "a") {
+          // Wait until aborted by watchdog or 2s safety timeout
+          await new Promise<void>((resolve) => {
+            config.abortSignal?.addEventListener("abort", () => {
+              abortFiredDuringA = true;
+              resolve();
+            }, { once: true });
+            setTimeout(resolve, 2000);
+          });
+        }
+        return { status: "success" };
+      },
+    });
+
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+      onEvent: (e) => events.push(e),
+    });
+
+    // Watchdog must have emitted a warning event
+    const warnings = events.filter(
+      (e) => e.kind === "warning" && (e as any).message?.includes("Watchdog")
+    );
+    expect(warnings.length).toBeGreaterThanOrEqual(1);
+    // The abort signal must have fired during node "a"'s execution
+    expect(abortFiredDuringA).toBe(true);
+  });
+
+  it("watchdog: registerWatchdogNode callback is provided to handlers", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Watchdog callbacks", watchdog_idle="5m"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        a [shape=box]
+        s -> a -> e
+      }
+    `);
+
+    let capturedRegister: ((nodeId: string, ac: AbortController) => void) | undefined;
+    let capturedUnregister: ((nodeId: string) => void) | undefined;
+    const registry = new HandlerRegistry({
+      async execute(_node: any, _ctx: any, _graph: any, config: any): Promise<Outcome> {
+        capturedRegister = config.registerWatchdogNode;
+        capturedUnregister = config.unregisterWatchdogNode;
+        return { status: "success" };
+      },
+    });
+
+    await run({
+      graph,
+      cwd: tmpDir,
+      logsRoot: path.join(tmpDir, "logs"),
+      interviewer: noopInterviewer,
+      registry,
+    });
+
+    expect(capturedRegister).toBeDefined();
+    expect(typeof capturedRegister).toBe("function");
+    expect(capturedUnregister).toBeDefined();
+    expect(typeof capturedUnregister).toBe("function");
+  });
 });

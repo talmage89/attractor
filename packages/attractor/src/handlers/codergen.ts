@@ -236,6 +236,7 @@ export class CodergenHandler implements Handler {
     if (node.reasoningEffort) ccOptions.reasoningEffort = parseEffort(node.reasoningEffort);
     ccOptions.timeout = node.timeout ?? graph.attributes.defaultTimeout ?? 3_600_000;
     if (resumeSessionId) ccOptions.resume = resumeSessionId;
+    if (config.abortSignal) ccOptions.abortSignal = config.abortSignal;
 
     const ccResult = await runCC(finalPrompt, ccOptions, (sdkEvent) => {
       config.onEvent?.({ kind: "cc_event", nodeId: node.id, event: sdkEvent, timestamp: Date.now() });

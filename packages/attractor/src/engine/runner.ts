@@ -18,6 +18,14 @@ import { selectEdge } from "./edge-selection.js";
 import { buildRetryPolicy, executeWithRetry } from "./retry.js";
 import { checkGoalGates, resolveRetryTarget } from "./goal-gates.js";
 import { resolveFidelity, resolveThreadId } from "../model/fidelity.js";
+import {
+  createWatchdog,
+  trackActivity,
+  registerNode,
+  unregisterNode,
+  stopWatchdog,
+  type WatchdogState,
+} from "./watchdog.js";
 
 /** Maximum number of loop_restart recursions before failing with a clear error. */
 export const MAX_LOOP_RESTART_DEPTH = 100;
@@ -67,6 +75,22 @@ export interface RunConfig {
    * depth (BUG-014). Internal use only — callers should not set this.
    */
   loopRestartBase?: string;
+  /**
+   * Abort signal for this specific node execution. Set by the runner when
+   * watchdog is active; CodergenHandler forwards it to runCC so the process
+   * is killed when the watchdog detects idleness.
+   */
+  abortSignal?: AbortSignal;
+  /**
+   * Register a per-branch AbortController with the active watchdog.
+   * Used by ParallelHandler so each branch can be independently killed.
+   */
+  registerWatchdogNode?: (nodeId: string, ac: AbortController) => void;
+  /**
+   * Unregister a branch from the active watchdog after it completes normally.
+   * Used by ParallelHandler to prevent spurious watchdog kills of done branches.
+   */
+  unregisterWatchdogNode?: (nodeId: string) => void;
 }
 
 export interface RunResult {
@@ -224,9 +248,24 @@ export async function run(config: RunConfig): Promise<RunResult> {
 
   let finalStatus: "success" | "fail" = "success";
 
+  // Start watchdog if configured. Declared before wrappedOnEvent so the closure can reference it.
+  let watchdog: WatchdogState | null = null;
+  if (graph.attributes.watchdogIdle) {
+    const idleMs = graph.attributes.watchdogIdle;
+    const pollMs = graph.attributes.watchdogPoll ?? 30_000;
+    watchdog = createWatchdog(idleMs, pollMs, (nodeId) => {
+      emit(config, {
+        kind: "warning",
+        message: `Watchdog: node "${nodeId}" idle for ${idleMs}ms — aborting`,
+        timestamp: Date.now(),
+      });
+    });
+  }
+
   // Wraps config.onEvent to intercept stage_retrying events, update per-node
   // retry counts, and save a mid-retry checkpoint so that a resumed pipeline
   // can start from the right attempt number rather than restarting at 1.
+  // Also drives watchdog activity tracking.
   function wrappedOnEvent(event: PipelineEvent): void {
     if (event.kind === "stage_retrying") {
       nodeRetries.set(event.nodeId, event.attempt);
@@ -246,7 +285,19 @@ export async function run(config: RunConfig): Promise<RunResult> {
         config.logsRoot
       ).catch(() => {});
     }
+    // Update watchdog activity timestamp for any node that emits heartbeat events.
+    if (watchdog && (event.kind === "cc_event" || event.kind === "stage_started")) {
+      trackActivity(watchdog, event.nodeId);
+    }
     config.onEvent?.(event);
+  }
+
+  // Helper closures passed to handlers so ParallelHandler can register per-branch controllers.
+  function doRegisterWatchdogNode(nodeId: string, ac: AbortController): void {
+    if (watchdog) registerNode(watchdog, nodeId, ac);
+  }
+  function doUnregisterWatchdogNode(nodeId: string): void {
+    if (watchdog) unregisterNode(watchdog, nodeId);
   }
 
   // 3. TRAVERSAL LOOP
@@ -257,6 +308,13 @@ export async function run(config: RunConfig): Promise<RunResult> {
       ? (nodeRetries.get(currentNode.id) ?? 0) + 1
       : 1;
 
+    // Create a per-node AbortController for the watchdog and register it.
+    // The controller's signal is threaded into the handler so idle nodes can be killed.
+    const nodeAbortController = watchdog ? new AbortController() : null;
+    if (watchdog && nodeAbortController) {
+      registerNode(watchdog, currentNode.id, nodeAbortController);
+    }
+
     // Build a per-iteration config that includes the incoming edge (so handlers
     // can honour edge-level fidelity/threadId overrides) and the
     // firstNodeAfterResume flag for the first node executed after a restore.
@@ -266,6 +324,9 @@ export async function run(config: RunConfig): Promise<RunResult> {
       incomingEdge: currentIncomingEdge,
       previousNodeId: currentPreviousNodeId,
       ...(isFirstNodeAfterResume ? { firstNodeAfterResume: true } : {}),
+      ...(nodeAbortController ? { abortSignal: nodeAbortController.signal } : {}),
+      registerWatchdogNode: doRegisterWatchdogNode,
+      unregisterWatchdogNode: doUnregisterWatchdogNode,
     };
     isFirstNodeAfterResume = false;
 
@@ -300,6 +361,8 @@ export async function run(config: RunConfig): Promise<RunResult> {
         exitPolicy,
         initialAttempt
       );
+      // Unregister from watchdog now that execution is complete.
+      if (watchdog) unregisterNode(watchdog, currentNode.id);
 
       totalCostUsd += exitOutcome.costUsd ?? 0;
       emit(config, {
@@ -378,6 +441,8 @@ export async function run(config: RunConfig): Promise<RunResult> {
       policy,
       initialAttempt
     );
+    // Unregister from watchdog now that execution is complete.
+    if (watchdog) unregisterNode(watchdog, currentNode.id);
 
     emit(config, {
       kind: "stage_completed",
@@ -479,6 +544,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
             }
             const base = config.loopRestartBase ?? config.logsRoot;
             const restartLogsRoot = `${base}-restart-${depth + 1}`;
+            if (watchdog) stopWatchdog(watchdog);
             const restartResult = await run({ ...config, logsRoot: restartLogsRoot, loopRestartBase: base, loopRestartDepth: depth + 1, resumeFromCheckpoint: undefined });
             return { ...restartResult, totalCostUsd: totalCostUsd + restartResult.totalCostUsd };
           }
@@ -543,6 +609,7 @@ export async function run(config: RunConfig): Promise<RunResult> {
       }
       const base = config.loopRestartBase ?? config.logsRoot;
       const restartLogsRoot = `${base}-restart-${depth + 1}`;
+      if (watchdog) stopWatchdog(watchdog);
       const restartResult = await run({ ...config, logsRoot: restartLogsRoot, loopRestartBase: base, loopRestartDepth: depth + 1, resumeFromCheckpoint: undefined });
       return { ...restartResult, totalCostUsd: totalCostUsd + restartResult.totalCostUsd };
     }
@@ -598,6 +665,10 @@ export async function run(config: RunConfig): Promise<RunResult> {
     },
     config.logsRoot
   );
+
+  // Stop watchdog before emitting pipeline_completed so the timer is cleaned up
+  // even if there is no activity after the last node completes.
+  if (watchdog) stopWatchdog(watchdog);
 
   emit(config, {
     kind: "pipeline_completed",

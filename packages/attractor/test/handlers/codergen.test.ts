@@ -761,6 +761,50 @@ describe("CodergenHandler", () => {
     // No timeout set anywhere → 1h = 3600000ms
     expect(options.timeout).toBe(3_600_000);
   });
+
+  it("passes config.abortSignal to runCC when provided (watchdog integration)", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        work [shape=box, prompt="Do work"]
+        e [shape=Msquare]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult());
+    const handler = new CodergenHandler(sessionManager);
+
+    const externalController = new AbortController();
+    const configWithSignal = {
+      ...makeConfig(),
+      abortSignal: externalController.signal,
+    };
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, configWithSignal as any);
+
+    const [, options] = mockRunCC.mock.calls[0];
+    expect(options.abortSignal).toBe(externalController.signal);
+  });
+
+  it("does not pass abortSignal to runCC when config.abortSignal is absent", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        work [shape=box, prompt="Do work"]
+        e [shape=Msquare]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult());
+    const handler = new CodergenHandler(sessionManager);
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, makeConfig() as any);
+
+    const [, options] = mockRunCC.mock.calls[0];
+    expect(options.abortSignal).toBeUndefined();
+  });
 });
 
 describe("buildStatusInstruction", () => {

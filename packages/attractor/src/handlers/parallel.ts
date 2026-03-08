@@ -226,17 +226,29 @@ export class ParallelHandler implements Handler {
     async function worker(): Promise<void> {
       while (nextIdx < items.length) {
         const currentIdx = nextIdx++;
+        const branchStartId = branchStartIds[currentIdx];
         const branchCtx = context.clone();
         const item = items[currentIdx];
         branchCtx.set(itemKey, typeof item === "string" ? item : JSON.stringify(item));
+        // Create a per-branch AbortController for independent watchdog tracking.
+        const branchController = config.registerWatchdogNode ? new AbortController() : null;
+        if (branchController) {
+          config.registerWatchdogNode!(branchStartId, branchController);
+        }
+        const branchConfig = branchController
+          ? { ...config, abortSignal: branchController.signal }
+          : config;
         try {
-          results[currentIdx] = await executeBranch(branchStartIds[currentIdx], branchCtx, graph, config, registry);
+          results[currentIdx] = await executeBranch(branchStartId, branchCtx, graph, branchConfig, registry);
         } catch (err) {
           results[currentIdx] = { status: "fail", failureReason: String(err) };
         }
+        if (branchController) {
+          config.unregisterWatchdogNode?.(branchStartId);
+        }
         config.onEvent?.({
           kind: "parallel_branch_completed",
-          nodeId: branchStartIds[currentIdx],
+          nodeId: branchStartId,
           branchIndex: currentIdx,
           totalBranches: items.length,
           outcome: results[currentIdx],
@@ -329,13 +341,24 @@ export class ParallelHandler implements Handler {
         const currentIdx = nextIdx++;
         const edge = edges[currentIdx];
         const branchCtx = context.clone();
+        // Create a per-branch AbortController for independent watchdog tracking.
+        const branchController = config.registerWatchdogNode ? new AbortController() : null;
+        if (branchController) {
+          config.registerWatchdogNode!(edge.to, branchController);
+        }
+        const branchConfig = branchController
+          ? { ...config, abortSignal: branchController.signal }
+          : config;
         try {
           const outcome = await executeBranch(
-            edge.to, branchCtx, graph, config, registry
+            edge.to, branchCtx, graph, branchConfig, registry
           );
           results[currentIdx] = outcome;
         } catch (err) {
           results[currentIdx] = { status: "fail", failureReason: String(err) };
+        }
+        if (branchController) {
+          config.unregisterWatchdogNode?.(edge.to);
         }
         config.onEvent?.({
           kind: "parallel_branch_completed",
