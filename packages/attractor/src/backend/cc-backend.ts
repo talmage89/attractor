@@ -76,6 +76,7 @@ export async function runCC(
         sessionId = msg.session_id as string;
       } else if (msg.type === "result") {
         resultMessage = msg;
+        break; // Result is terminal — don't wait for generator to close
       }
     }
 

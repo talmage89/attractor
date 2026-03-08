@@ -212,6 +212,32 @@ describe("runCC", () => {
     );
   });
 
+  it("stops processing messages after result (break on result)", async () => {
+    const messages = [
+      { type: "system", subtype: "init", session_id: "s-break" },
+      {
+        type: "result",
+        subtype: "success",
+        result: "done",
+        session_id: "s-break",
+        total_cost_usd: 0.01,
+        num_turns: 1,
+      },
+      // These messages appear AFTER the result — they should not be forwarded
+      { type: "assistant", message: { content: [] } },
+      { type: "assistant", message: { content: [] } },
+    ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockQuery.mockReturnValueOnce(mockGenerator(messages) as any);
+
+    const events: unknown[] = [];
+    const result = await runCC("test", { cwd: "/tmp" }, (event) => events.push(event));
+
+    expect(result.success).toBe(true);
+    // Only system+result events received; post-result assistant messages skipped
+    expect(events.length).toBe(2);
+  });
+
   it("passes system prompt append", async () => {
     mockQuery.mockReturnValueOnce(
       mockGenerator([
