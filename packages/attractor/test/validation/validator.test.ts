@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as os from "node:os";
 import { parse } from "../../src/parser/parser.js";
 import { validate, validateOrThrow } from "../../src/validation/validator.js";
 import type { Graph, GraphNode, Edge } from "../../src/model/graph.js";
@@ -452,6 +455,22 @@ describe("validation", () => {
           w [type=tool, cmd="echo hi"]
           e [type=exit]
           s -> w -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_on_llm_nodes");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not warn when a box node has prompt_file set (false positive fix)", () => {
+      // A codergen node with only prompt_file — no prompt, no label.
+      // The rule must NOT fire because prompt_file provides the prompt at runtime.
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          n [shape=box, prompt_file="prompts/sprint/plan.md"]
+          s -> n -> e
         }
       `);
       const diags = validate(graph);
@@ -1112,6 +1131,40 @@ describe("validation", () => {
       const diags = validate(graph);
       const rule = diags.filter(d => d.rule === "prompt_file_not_found");
       expect(rule).toHaveLength(0);
+    });
+
+    it("resolves prompt_file relative to the provided cwd, not process.cwd()", async () => {
+      // Create a temp project dir with the prompt file at the expected location.
+      const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "attractor-validate-cwd-"));
+      try {
+        await fs.mkdir(path.join(projectDir, ".attractor", "prompts"), { recursive: true });
+        await fs.writeFile(
+          path.join(projectDir, ".attractor", "prompts", "plan.md"),
+          "Do the work"
+        );
+
+        const graph = parse(`
+          digraph G {
+            s [shape=Mdiamond]
+            e [shape=Msquare]
+            n [shape=box, prompt_file="prompts/plan.md"]
+            s -> n -> e
+          }
+        `);
+
+        // Without cwd: process.cwd() is used — file won't be found there → warning
+        const diagsWithoutCwd = validate(graph);
+        const warnWithoutCwd = diagsWithoutCwd.filter(d => d.rule === "prompt_file_not_found");
+        // This may or may not warn depending on process.cwd() contents, so we only
+        // verify that passing the correct cwd suppresses the warning.
+
+        // With correct cwd: file exists → no warning
+        const diagsWithCwd = validate(graph, undefined, projectDir);
+        const warnWithCwd = diagsWithCwd.filter(d => d.rule === "prompt_file_not_found");
+        expect(warnWithCwd).toHaveLength(0);
+      } finally {
+        await fs.rm(projectDir, { recursive: true, force: true });
+      }
     });
   });
 

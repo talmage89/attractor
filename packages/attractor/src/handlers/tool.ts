@@ -14,7 +14,7 @@ export interface ShellResult {
 
 export async function runShellCommand(
   command: string,
-  options: { cwd: string; timeoutMs: number }
+  options: { cwd: string; timeoutMs: number; abortSignal?: AbortSignal }
 ): Promise<ShellResult> {
   return new Promise((resolve) => {
     let timedOut = false;
@@ -59,13 +59,27 @@ export async function runShellCommand(
       setTimeout(() => killProcessGroup("SIGKILL"), 2000);
     }, options.timeoutMs);
 
+    // Watchdog abort: kill the process group when the abort signal fires.
+    const onAbort = () => {
+      killProcessGroup("SIGTERM");
+      setTimeout(() => killProcessGroup("SIGKILL"), 2000);
+    };
+    if (options.abortSignal?.aborted) {
+      // Signal was already aborted before spawn — kill immediately.
+      onAbort();
+    } else {
+      options.abortSignal?.addEventListener("abort", onAbort, { once: true });
+    }
+
     child.on("close", (code: number | null) => {
       clearTimeout(killTimer);
+      options.abortSignal?.removeEventListener("abort", onAbort);
       resolve({ stdout, stderr, exitCode: code ?? 1, timedOut });
     });
 
     child.on("error", (err: Error) => {
       clearTimeout(killTimer);
+      options.abortSignal?.removeEventListener("abort", onAbort);
       resolve({ stdout, stderr: err.message, exitCode: 1, timedOut: false });
     });
   });
@@ -88,7 +102,11 @@ export class ToolHandler implements Handler {
     }
 
     const timeoutMs = node.timeout ?? graph.attributes?.defaultTimeout ?? 30_000;
-    const result = await runShellCommand(command, { cwd: config.cwd, timeoutMs });
+    const result = await runShellCommand(command, {
+      cwd: config.cwd,
+      timeoutMs,
+      abortSignal: config.abortSignal,
+    });
 
     const output = result.stdout.slice(0, MAX_OUTPUT_LENGTH);
     const contextUpdates: Record<string, string> = {

@@ -515,6 +515,48 @@ describe("cmdRun", () => {
     // Should succeed
     expect(exitCode).toBe(0);
   });
+
+  it("--resume-last with --cwd finds checkpoint in the specified project directory", async () => {
+    // Create a project directory with a run checkpoint — simulates a prior run.
+    const projectDir = path.join(tmpDir, "myproject");
+    const runsDir = path.join(projectDir, ".attractor", "runs", "2026-01-15T00-00-00-000Z");
+    await fs.mkdir(runsDir, { recursive: true });
+
+    const checkpoint = {
+      timestamp: 1704067200000,
+      currentNode: "work",
+      completedNodes: ["start"],
+      nodeOutcomes: [],
+      nodeRetries: {},
+      contextValues: {},
+      sessionMap: {},
+      goalGateRetries: 0,
+    };
+    await fs.writeFile(
+      path.join(runsDir, "checkpoint.json"),
+      JSON.stringify(checkpoint)
+    );
+
+    // Write a minimal pipeline dag into the project directory
+    const dotfile = path.join(projectDir, "test.dag");
+    await fs.writeFile(dotfile, VALID_PIPELINE);
+    const logsRoot = path.join(tmpDir, "logs");
+
+    // Run from a different directory (tmpDir) with --cwd pointing to the project.
+    // Before the fix, findLastCheckpoint() used process.cwd() and would not find
+    // the checkpoint in projectDir.
+    let exitCode: number | undefined;
+    try {
+      await cmdRun([dotfile, "--cwd", projectDir, "--logs", logsRoot, "--resume-last"]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+
+    // Should NOT exit 3 with "No previous runs found" — the checkpoint should be found.
+    // The "work" node is not an exit node, so resume proceeds and exits 0 (simple pipeline).
+    expect(stderrOutput).not.toContain("No previous runs found");
+    expect(exitCode).not.toBe(3);
+  });
 });
 
 // ---------------------------------------------------------------------------

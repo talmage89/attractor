@@ -165,4 +165,41 @@ describe("ToolHandler", () => {
     expect(outcome.status).toBe("fail");
     expect(elapsed).toBeLessThan(5000);
   });
+
+  it("abort signal kills the running shell command (watchdog integration)", async () => {
+    // A command that would run for 10 seconds, but an AbortController fires after 200ms.
+    // Before the fix, ToolHandler ignored config.abortSignal and the command ran to completion.
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 200);
+
+    const start = Date.now();
+    const result = await runShellCommand("sleep 10", {
+      cwd: tmpDir,
+      timeoutMs: 60_000,
+      abortSignal: controller.signal,
+    });
+    const elapsed = Date.now() - start;
+
+    // Should have been killed well before the command's natural 10s duration
+    expect(elapsed).toBeLessThan(3000);
+    // Exit code is non-zero (killed)
+    expect(result.exitCode).not.toBe(0);
+  });
+
+  it("pre-aborted signal kills the process immediately after spawn", async () => {
+    const controller = new AbortController();
+    controller.abort(); // already aborted before calling runShellCommand
+
+    const start = Date.now();
+    const result = await runShellCommand("sleep 10", {
+      cwd: tmpDir,
+      timeoutMs: 60_000,
+      abortSignal: controller.signal,
+    });
+    const elapsed = Date.now() - start;
+
+    // Should complete quickly — process is killed shortly after spawn
+    expect(elapsed).toBeLessThan(2000);
+    expect(result.exitCode).not.toBe(0);
+  });
 });

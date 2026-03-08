@@ -97,8 +97,8 @@ export function formatEvent(event: PipelineEvent, startTime: number): string {
   }
 }
 
-async function findLastCheckpoint(): Promise<string | null> {
-  const runsDir = path.join(".attractor", "runs");
+async function findLastCheckpoint(cwd: string): Promise<string | null> {
+  const runsDir = path.join(cwd, ".attractor", "runs");
   let entries: string[];
   try {
     entries = await fs.readdir(runsDir);
@@ -152,9 +152,11 @@ export async function cmdRun(args: string[]): Promise<void> {
     return "" as never;
   });
 
+  const workingCwd = (values.cwd as string | undefined) ?? process.cwd();
+
   const graph = parse(source);
   applyTransforms(graph);
-  const diags = validate(graph);
+  const diags = validate(graph, undefined, workingCwd);
   const errors = diags.filter((d) => d.severity === "error");
   for (const d of diags) {
     process.stderr.write(`[${d.severity}] (${d.rule}) ${d.message}\n`);
@@ -166,7 +168,7 @@ export async function cmdRun(args: string[]): Promise<void> {
   // Resolve --resume-last: find the most recent run's checkpoint
   let resolvedResume: string | undefined = values.resume as string | undefined;
   if (values["resume-last"]) {
-    const lastCheckpoint = await findLastCheckpoint();
+    const lastCheckpoint = await findLastCheckpoint(workingCwd);
     if (!lastCheckpoint) {
       process.stderr.write("Error: No previous runs found in .attractor/runs/\n");
       process.exit(3);
@@ -191,8 +193,6 @@ export async function cmdRun(args: string[]): Promise<void> {
     }
     resolvedResume = lastCheckpoint;
   }
-
-  const workingCwd = (values.cwd as string | undefined) ?? process.cwd();
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const logsRoot = (values.logs as string | undefined) ?? path.join(".attractor", "runs", timestamp);
@@ -287,7 +287,9 @@ export async function cmdValidate(args: string[]): Promise<void> {
   const graph = parse(source);
   applyTransforms(graph);
 
-  const diags = validate(graph);
+  // Resolve prompt_file paths relative to the dotfile's directory
+  const validateCwd = path.dirname(path.resolve(dotfile));
+  const diags = validate(graph, undefined, validateCwd);
   for (const d of diags) {
     process.stdout.write(`[${d.severity}] (${d.rule}) ${d.message}\n`);
   }

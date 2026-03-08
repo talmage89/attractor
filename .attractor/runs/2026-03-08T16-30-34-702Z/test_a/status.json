@@ -1,0 +1,11 @@
+{
+  "status": "fail",
+  "preferredLabel": "",
+  "contextUpdates": {
+    "outcome": "fail",
+    "bugs_found": "1"
+  },
+  "notes": "1 bug found: ToolHandler ignores config.abortSignal — watchdog fires misleading 'aborting' warning for tool nodes but doesn't kill them.",
+  "failureReason": "1 bug found: ToolHandler ignores config.abortSignal — watchdog fires misleading 'aborting' warning for tool nodes but doesn't kill them.",
+  "costUsd": 3.576849749999999
+}

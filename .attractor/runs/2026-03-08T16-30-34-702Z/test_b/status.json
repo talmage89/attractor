@@ -1,0 +1,9 @@
+{
+  "status": "success",
+  "contextUpdates": {
+    "outcome": "fail",
+    "bugs_found": "2"
+  },
+  "notes": "Found 2 bugs: --resume-last ignores --cwd flag; prompt_file_not_found validation uses process.cwd() not DAG location. All other 25+ integration tests pass.",
+  "costUsd": 3.0244472499999997
+}

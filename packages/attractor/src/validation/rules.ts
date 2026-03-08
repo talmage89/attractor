@@ -11,7 +11,7 @@ import type { Diagnostic } from "./diagnostic.js";
 import { parseCondition } from "../conditions/parser.js";
 import { parseStylesheet } from "../stylesheet/parser.js";
 
-export type LintRule = (graph: Graph) => Diagnostic[];
+export type LintRule = (graph: Graph, cwd?: string) => Diagnostic[];
 
 function startNodeRule(graph: Graph): Diagnostic[] {
   const startNodes = [...graph.nodes.values()].filter(
@@ -369,7 +369,7 @@ function promptOnLlmNodesRule(graph: Graph): Diagnostic[] {
   for (const node of graph.nodes.values()) {
     const isLlmNode = !node.type && (node.shape === "box" || node.shape === "");
     const hasExplicitLabel = node.raw.has("label");
-    if (isLlmNode && !node.prompt && !hasExplicitLabel) {
+    if (isLlmNode && !node.prompt && !hasExplicitLabel && !node.promptFile) {
       diags.push({
         rule: "prompt_on_llm_nodes",
         severity: "warning",
@@ -476,11 +476,11 @@ function promptAndPromptFileConflictRule(graph: Graph): Diagnostic[] {
   return diags;
 }
 
-function promptFileNotFoundRule(graph: Graph): Diagnostic[] {
+function promptFileNotFoundRule(graph: Graph, cwd?: string): Diagnostic[] {
   const diags: Diagnostic[] = [];
   for (const node of graph.nodes.values()) {
     if (!node.promptFile) continue;
-    const resolvedPath = path.join(process.cwd(), ".attractor", node.promptFile);
+    const resolvedPath = path.join(cwd ?? process.cwd(), ".attractor", node.promptFile);
     if (!fs.existsSync(resolvedPath)) {
       diags.push({
         rule: "prompt_file_not_found",

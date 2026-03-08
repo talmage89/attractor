@@ -2,17 +2,17 @@ import type { Graph } from "../model/graph.js";
 import type { Diagnostic } from "./diagnostic.js";
 import { BUILT_IN_RULES, type LintRule } from "./rules.js";
 
-export function validate(graph: Graph, extraRules?: LintRule[]): Diagnostic[] {
+export function validate(graph: Graph, extraRules?: LintRule[], cwd?: string): Diagnostic[] {
   const rules = [...BUILT_IN_RULES, ...(extraRules ?? [])];
   const diagnostics: Diagnostic[] = [];
   for (const rule of rules) {
-    diagnostics.push(...rule(graph));
+    diagnostics.push(...rule(graph, cwd));
   }
   return diagnostics;
 }
 
-export function validateOrThrow(graph: Graph, extraRules?: LintRule[]): Diagnostic[] {
-  const diagnostics = validate(graph, extraRules);
+export function validateOrThrow(graph: Graph, extraRules?: LintRule[], cwd?: string): Diagnostic[] {
+  const diagnostics = validate(graph, extraRules, cwd);
   const errors = diagnostics.filter((d) => d.severity === "error");
   if (errors.length > 0) {
     const messages = errors.map((d) => `[${d.rule}] ${d.message}`).join("\n");
