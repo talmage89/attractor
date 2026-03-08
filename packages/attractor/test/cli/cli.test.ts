@@ -518,6 +518,158 @@ describe("cmdRun", () => {
 });
 
 // ---------------------------------------------------------------------------
+// --resume-last tests
+// ---------------------------------------------------------------------------
+
+describe("cmdRun --resume-last", () => {
+  let tmpDir: string;
+  let stderrOutput: string;
+  let stdoutOutput: string;
+  let origCwd: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "attractor-cli-resume-last-"));
+    origCwd = process.cwd();
+    stderrOutput = "";
+    stdoutOutput = "";
+    vi.spyOn(process, "exit").mockImplementation((code?: number): never => {
+      throw new ExitError(code ?? 0);
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation((data: unknown) => {
+      stderrOutput += String(data);
+      return true;
+    });
+    vi.spyOn(process.stdout, "write").mockImplementation((data: unknown) => {
+      stdoutOutput += String(data);
+      return true;
+    });
+  });
+
+  afterEach(async () => {
+    process.chdir(origCwd);
+    vi.restoreAllMocks();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("exits 3 when both --resume and --resume-last are provided", async () => {
+    const dotfile = path.join(tmpDir, "valid.dot");
+    await fs.writeFile(dotfile, VALID_PIPELINE);
+    const logsRoot = path.join(tmpDir, "logs");
+
+    let exitCode: number | undefined;
+    try {
+      await cmdRun([dotfile, "--cwd", tmpDir, "--logs", logsRoot, "--resume", "some.json", "--resume-last"]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    expect(exitCode).toBe(3);
+    expect(stderrOutput).toContain("mutually exclusive");
+  });
+
+  it("exits 3 with clear message when no prior runs exist", async () => {
+    const dotfile = path.join(tmpDir, "valid.dot");
+    await fs.writeFile(dotfile, VALID_PIPELINE);
+    const logsRoot = path.join(tmpDir, "logs");
+
+    // No .attractor/runs/ directory — ensure cwd is tmpDir
+    process.chdir(tmpDir);
+
+    let exitCode: number | undefined;
+    try {
+      await cmdRun([dotfile, "--cwd", tmpDir, "--logs", logsRoot, "--resume-last"]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    expect(exitCode).toBe(3);
+    expect(stderrOutput).toContain("No previous runs found");
+  });
+
+  it("exits 0 with 'nothing to resume' when last checkpoint is at an exit node", async () => {
+    const dotfile = path.join(tmpDir, "valid.dot");
+    await fs.writeFile(dotfile, VALID_PIPELINE);
+    const logsRoot = path.join(tmpDir, "logs");
+
+    // VALID_PIPELINE: s [shape=Mdiamond], e [shape=Msquare], s -> e
+    // currentNode=e is Msquare (exit node) → pipeline completed
+    const runDir = path.join(tmpDir, ".attractor", "runs", "2025-01-01T00-00-00-000Z");
+    await fs.mkdir(runDir, { recursive: true });
+    await fs.writeFile(
+      path.join(runDir, "checkpoint.json"),
+      JSON.stringify({
+        timestamp: Date.now(),
+        currentNode: "e",
+        completedNodes: ["s", "e"],
+        nodeOutcomes: {},
+        nodeRetries: {},
+        contextValues: {},
+        sessionMap: {},
+      })
+    );
+
+    process.chdir(tmpDir);
+    let exitCode: number | undefined;
+    try {
+      await cmdRun([dotfile, "--cwd", tmpDir, "--logs", logsRoot, "--resume-last"]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    expect(exitCode).toBe(0);
+    expect(stdoutOutput).toContain("nothing to resume");
+  });
+
+  it("picks the most recent run directory (lexicographic descending)", async () => {
+    const dotfile = path.join(tmpDir, "valid.dot");
+    await fs.writeFile(dotfile, VALID_PIPELINE);
+    const logsRoot = path.join(tmpDir, "logs");
+
+    // Create two run dirs; the later timestamp should be preferred
+    const olderDir = path.join(tmpDir, ".attractor", "runs", "2025-01-01T00-00-00-000Z");
+    const newerDir = path.join(tmpDir, ".attractor", "runs", "2025-06-01T00-00-00-000Z");
+    await fs.mkdir(olderDir, { recursive: true });
+    await fs.mkdir(newerDir, { recursive: true });
+
+    // Older run: mid-way at node "s" (start, not exit)
+    await fs.writeFile(
+      path.join(olderDir, "checkpoint.json"),
+      JSON.stringify({
+        timestamp: 1000,
+        currentNode: "s",
+        completedNodes: [],
+        nodeOutcomes: {},
+        nodeRetries: {},
+        contextValues: {},
+        sessionMap: {},
+      })
+    );
+
+    // Newer run: completed at exit node "e"
+    await fs.writeFile(
+      path.join(newerDir, "checkpoint.json"),
+      JSON.stringify({
+        timestamp: 2000,
+        currentNode: "e",
+        completedNodes: ["s", "e"],
+        nodeOutcomes: {},
+        nodeRetries: {},
+        contextValues: {},
+        sessionMap: {},
+      })
+    );
+
+    process.chdir(tmpDir);
+    let exitCode: number | undefined;
+    try {
+      await cmdRun([dotfile, "--cwd", tmpDir, "--logs", logsRoot, "--resume-last"]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    // Newer run is at exit node → "nothing to resume"
+    expect(exitCode).toBe(0);
+    expect(stdoutOutput).toContain("nothing to resume");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // cmdVisualize tests
 // ---------------------------------------------------------------------------
 

@@ -97,6 +97,28 @@ export function formatEvent(event: PipelineEvent, startTime: number): string {
   }
 }
 
+async function findLastCheckpoint(): Promise<string | null> {
+  const runsDir = path.join(".attractor", "runs");
+  let entries: string[];
+  try {
+    entries = await fs.readdir(runsDir);
+  } catch {
+    return null;
+  }
+  // ISO timestamp dirs sort lexicographically — descending order = most recent first
+  entries.sort((a, b) => b.localeCompare(a));
+  for (const entry of entries) {
+    const checkpointPath = path.join(runsDir, entry, "checkpoint.json");
+    try {
+      await fs.access(checkpointPath);
+      return checkpointPath;
+    } catch {
+      // no checkpoint in this run dir
+    }
+  }
+  return null;
+}
+
 export async function cmdRun(args: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     args,
@@ -104,6 +126,7 @@ export async function cmdRun(args: string[]): Promise<void> {
       cwd: { type: "string" },
       logs: { type: "string" },
       resume: { type: "string" },
+      "resume-last": { type: "boolean", default: false },
       "auto-approve": { type: "boolean", default: false },
       "permission-mode": { type: "string", default: "bypassPermissions" },
       verbose: { type: "boolean", default: false },
@@ -114,6 +137,12 @@ export async function cmdRun(args: string[]): Promise<void> {
   const dotfile = positionals[0];
   if (!dotfile) {
     process.stderr.write("Usage: attractor run <dotfile> [options]\n");
+    process.exit(3);
+  }
+
+  // Validate mutual exclusion of --resume and --resume-last
+  if (values.resume && values["resume-last"]) {
+    process.stderr.write("Error: --resume and --resume-last are mutually exclusive\n");
     process.exit(3);
   }
 
@@ -132,6 +161,35 @@ export async function cmdRun(args: string[]): Promise<void> {
   }
   if (errors.length > 0) {
     process.exit(2);
+  }
+
+  // Resolve --resume-last: find the most recent run's checkpoint
+  let resolvedResume: string | undefined = values.resume as string | undefined;
+  if (values["resume-last"]) {
+    const lastCheckpoint = await findLastCheckpoint();
+    if (!lastCheckpoint) {
+      process.stderr.write("Error: No previous runs found in .attractor/runs/\n");
+      process.exit(3);
+    }
+    // Check if the pipeline already completed successfully
+    try {
+      const { loadCheckpoint } = await import("./model/checkpoint.js");
+      const checkpoint = await loadCheckpoint(lastCheckpoint);
+      const exitNodeId = checkpoint.currentNode;
+      const isExitNode =
+        graph.nodes.has(exitNodeId) &&
+        (() => {
+          const n = graph.nodes.get(exitNodeId)!;
+          return n.shape === "Msquare" || n.type === "exit" || n.id === "exit" || n.id === "end";
+        })();
+      if (isExitNode) {
+        process.stdout.write("Last pipeline completed successfully, nothing to resume\n");
+        process.exit(0);
+      }
+    } catch {
+      // If checkpoint can't be read, just pass it to run() which will handle the error
+    }
+    resolvedResume = lastCheckpoint;
   }
 
   const workingCwd = (values.cwd as string | undefined) ?? process.cwd();
@@ -186,7 +244,7 @@ export async function cmdRun(args: string[]): Promise<void> {
       logsRoot,
       interviewer,
       onEvent,
-      resumeFromCheckpoint: values.resume as string | undefined,
+      resumeFromCheckpoint: resolvedResume,
       ccPermissionMode: values["permission-mode"] as "default" | "acceptEdits" | "bypassPermissions",
       registry,
       sessionManager,
