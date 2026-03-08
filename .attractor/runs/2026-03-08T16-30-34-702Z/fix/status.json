@@ -1,0 +1,10 @@
+{
+  "status": "success",
+  "contextUpdates": {
+    "bugs_fixed": "1",
+    "files_changed": "packages/attractor/src/cli.ts, packages/attractor/test/cli/cli.test.ts",
+    "tests_passing": "523 attractor + 73 attractor-lsp = 596 total"
+  },
+  "notes": "Fixed BUG-A-001/BUG-B-002: validateCwd now walks up path to find .attractor ancestor (handles nested subdirs). 596 tests pass.",
+  "costUsd": 0.8819444999999998
+}

@@ -3,8 +3,8 @@
   "contextUpdates": {
     "test_plan_path": ".attractor/workspace/test-plan.md",
     "agent_count": "3",
-    "primary_risk_areas": "watchdog, prompt_file, resume-last, default_timeout, break-on-result, comments"
+    "primary_risk_areas": "BUG-A-001-nested-attractor-path-fix, validateCwd-depth-variants, cumulative-10-fix-regression, cross-feature-integration, stripComments-edge-cases, cli-error-paths, default-timeout-watchdog-validation"
   },
-  "notes": "Test plan written with 3 agents: A=watchdog+runtime, B=prompt_file+resume-last, C=default_timeout+comments+break-on-result. Deliberate overlap on high-risk areas.",
-  "costUsd": 0.48284144999999995
+  "notes": "Round 7 test plan: verify nested .attractor/ validateCwd fix, 10-fix cumulative regression, cross-feature integration.",
+  "costUsd": 0.55673275
 }

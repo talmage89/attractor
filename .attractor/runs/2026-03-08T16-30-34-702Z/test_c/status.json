@@ -1,9 +1,9 @@
 {
   "status": "success",
   "contextUpdates": {
-    "outcome": "fail",
-    "bugs_found": "1"
+    "outcome": "success",
+    "bugs_found": "0"
   },
-  "notes": "1 bug found: prompt_on_llm_nodes false positive when prompt_file set. 37/38 integration tests passed. All 583 unit tests pass.",
-  "costUsd": 2.88028325
+  "notes": "596 tests pass, build/typecheck clean. 46+25+18+13 integration tests. Round 6 fix verified at 1/2/3 depths. No bugs found.",
+  "costUsd": 3.46431175
 }

@@ -1,9 +1,9 @@
 {
   "status": "success",
   "contextUpdates": {
-    "outcome": "fail",
-    "bugs_found": "2"
+    "outcome": "success",
+    "bugs_found": "0"
   },
-  "notes": "Found 2 bugs: --resume-last ignores --cwd flag; prompt_file_not_found validation uses process.cwd() not DAG location. All other 25+ integration tests pass.",
-  "costUsd": 3.0244472499999997
+  "notes": "596 tests pass, build/typecheck clean. All 5 test_b scenarios PASS. Watchdog/timeout/prompt_file/comments/resume-last all verified. No bugs found.",
+  "costUsd": 1.49710425
 }
