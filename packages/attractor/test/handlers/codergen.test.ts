@@ -475,6 +475,7 @@ describe("CodergenHandler", () => {
       reasoningEffort: "",
       autoStatus: false,
       allowPartial: false,
+      promptFile: "",
       raw: new Map(),
     };
     const graph: import("../../src/model/graph.js").Graph = {
@@ -487,6 +488,7 @@ describe("CodergenHandler", () => {
         retryTarget: "",
         fallbackRetryTarget: "",
         defaultFidelity: "",
+        defaultTimeout: null,
         raw: new Map(),
       },
       nodes: new Map([["../../evil", evilNode]]),
@@ -646,6 +648,100 @@ describe("CodergenHandler", () => {
     expect(options.timeout).toBe(2_700_000);
   });
 
+  it("reads prompt from prompt_file when node.prompt is empty", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Build feature"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt_file="prompts/sprint/plan.md"]
+        s -> work -> e
+      }
+    `);
+
+    // Write a prompt file in the .attractor directory relative to tmpDir (the cwd)
+    const attractor = path.join(tmpDir, ".attractor", "prompts", "sprint");
+    await fs.mkdir(attractor, { recursive: true });
+    await fs.writeFile(path.join(attractor, "plan.md"), "Read the plan and implement it.");
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult());
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, config as any);
+
+    const [prompt] = mockRunCC.mock.calls[0];
+    expect(prompt).toContain("Read the plan and implement it.");
+  });
+
+  it("expands $goal in prompt_file contents", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Write tests"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt_file="prompts/task.md"]
+        s -> work -> e
+      }
+    `);
+
+    const attractor = path.join(tmpDir, ".attractor", "prompts");
+    await fs.mkdir(attractor, { recursive: true });
+    await fs.writeFile(path.join(attractor, "task.md"), "Goal is: $goal. Please proceed.");
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult());
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, config as any);
+
+    const [prompt] = mockRunCC.mock.calls[0];
+    expect(prompt).toContain("Goal is: Write tests. Please proceed.");
+  });
+
+  it("prompt takes precedence over prompt_file when both are set", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt="Inline prompt wins", prompt_file="prompts/plan.md"]
+        s -> work -> e
+      }
+    `);
+
+    const attractor = path.join(tmpDir, ".attractor", "prompts");
+    await fs.mkdir(attractor, { recursive: true });
+    await fs.writeFile(path.join(attractor, "plan.md"), "File prompt (should be ignored)");
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult());
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, config as any);
+
+    const [prompt] = mockRunCC.mock.calls[0];
+    expect(prompt).toContain("Inline prompt wins");
+    expect(prompt).not.toContain("File prompt (should be ignored)");
+  });
+
+  it("returns fail outcome when prompt_file does not exist", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        e [shape=Msquare]
+        work [shape=box, prompt_file="prompts/nonexistent.md"]
+        s -> work -> e
+      }
+    `);
+
+    const handler = new CodergenHandler(sessionManager);
+    const config = makeConfig();
+    const outcome = await handler.execute(graph.nodes.get("work")!, new Context(), graph, config as any);
+
+    expect(outcome.status).toBe("fail");
+    expect(outcome.failureReason).toContain("nonexistent.md");
+    expect(mockRunCC).not.toHaveBeenCalled();
+  });
+
   it("falls back to 1h when neither node nor graph specifies timeout", async () => {
     const graph = parse(`
       digraph G {
@@ -688,6 +784,7 @@ describe("buildStatusInstruction", () => {
       reasoningEffort: "",
       autoStatus: false,
       allowPartial: false,
+      promptFile: "",
       raw: new Map(),
     };
   }

@@ -44,6 +44,7 @@ export interface GraphNode {
   reasoningEffort: string;
   autoStatus: boolean;
   allowPartial: boolean;
+  promptFile: string;
   raw: Map<string, string>;
   span?: Span;
 }

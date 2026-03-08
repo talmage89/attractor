@@ -139,7 +139,23 @@ export class CodergenHandler implements Handler {
     config: RunConfig
   ): Promise<Outcome> {
     // 1. Build prompt ($goal substitution already done by applyTransforms)
-    const prompt = node.prompt || node.label || node.id;
+    //    If prompt_file is set and prompt is empty, read the file at execution time.
+    let prompt = node.prompt;
+    if (!prompt && node.promptFile) {
+      const promptFilePath = path.join(config.cwd, ".attractor", node.promptFile);
+      try {
+        const fileContents = await fs.readFile(promptFilePath, "utf-8");
+        // Apply $goal substitution to file contents (mirrors applyTransforms behaviour)
+        const goal = graph.attributes.goal ?? "";
+        prompt = fileContents.replaceAll("$goal", goal);
+      } catch {
+        return {
+          status: "fail",
+          failureReason: `prompt_file '${node.promptFile}' not found at ${promptFilePath}`,
+        };
+      }
+    }
+    prompt = prompt || node.label || node.id;
 
     // 2. Resolve fidelity and session
     // If this is the first node after a checkpoint resume and fidelity is "full",

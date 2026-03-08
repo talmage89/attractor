@@ -23,6 +23,7 @@ function makeNode(id: string, overrides: Partial<GraphNode> = {}): GraphNode {
     reasoningEffort: "",
     autoStatus: false,
     allowPartial: false,
+    promptFile: "",
     raw: new Map(),
     ...overrides,
   };
@@ -39,6 +40,7 @@ function makeGraph(nodeList: GraphNode[], edgeList: Edge[] = []): Graph {
       retryTarget: "",
       fallbackRetryTarget: "",
       defaultFidelity: "",
+      defaultTimeout: null,
       raw: new Map(),
     },
     nodes: new Map(nodeList.map((n) => [n.id, n])),
@@ -984,6 +986,130 @@ describe("validation", () => {
       const diags = validate(graph);
       const errors = diags.filter(d => d.severity === "error");
       expect(errors).toHaveLength(0);
+    });
+  });
+
+  describe("promptFileOnNonCodergenRule", () => {
+    it("warns when prompt_file is set on a tool node", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          t [type=tool, prompt_file="prompts/work.md"]
+          s -> t -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_file_on_non_codergen");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("tool");
+    });
+
+    it("does not warn when prompt_file is set on a codergen node (shape=box)", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          n [shape=box, prompt_file="prompts/work.md"]
+          s -> n -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_file_on_non_codergen");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not warn when prompt_file is absent", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_file_on_non_codergen");
+      expect(rule).toHaveLength(0);
+    });
+  });
+
+  describe("promptAndPromptFileConflictRule", () => {
+    it("warns when both prompt and prompt_file are set", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          n [shape=box, prompt="Hello", prompt_file="prompts/work.md"]
+          s -> n -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_and_prompt_file_conflict");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("prompt takes precedence");
+    });
+
+    it("does not warn when only prompt is set", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          n [shape=box, prompt="Hello"]
+          s -> n -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_and_prompt_file_conflict");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not warn when only prompt_file is set", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          n [shape=box, prompt_file="prompts/work.md"]
+          s -> n -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_and_prompt_file_conflict");
+      expect(rule).toHaveLength(0);
+    });
+  });
+
+  describe("promptFileNotFoundRule", () => {
+    it("warns when prompt_file path does not exist", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          n [shape=box, prompt_file="prompts/nonexistent-xyz-12345.md"]
+          s -> n -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_file_not_found");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("warning");
+      expect(rule[0].message).toContain("not found");
+      expect(rule[0].message).toContain("nonexistent-xyz-12345.md");
+    });
+
+    it("does not warn when prompt_file is absent", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          n [shape=box, prompt="Hello"]
+          s -> n -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "prompt_file_not_found");
+      expect(rule).toHaveLength(0);
     });
   });
 

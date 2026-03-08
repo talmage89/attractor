@@ -419,4 +419,42 @@ describe("parser", () => {
       expect(graph.attributes.defaultMaxRetry).toBe(5);
     });
   });
+
+  describe("prompt_file parsing", () => {
+    it("parses prompt_file attribute on a node", () => {
+      const graph = parse(`
+        digraph G {
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          work  [shape=box, prompt_file="prompts/sprint/plan.md"]
+          start -> work -> exit
+        }
+      `);
+      expect(graph.nodes.get("work")?.promptFile).toBe("prompts/sprint/plan.md");
+    });
+
+    it("defaults promptFile to empty string when not set", () => {
+      const graph = parse(`
+        digraph G {
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          work  [shape=box, prompt="Do work"]
+          start -> work -> exit
+        }
+      `);
+      expect(graph.nodes.get("work")?.promptFile).toBe("");
+    });
+
+    it("stores prompt_file in node.raw", () => {
+      const graph = parse(`
+        digraph G {
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          n [shape=box, prompt_file="my/prompt.md"]
+          start -> n -> exit
+        }
+      `);
+      expect(graph.nodes.get("n")?.raw.get("prompt_file")).toBe("my/prompt.md");
+    });
+  });
 });

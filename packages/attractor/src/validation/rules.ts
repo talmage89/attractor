@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { Graph } from "../model/graph.js";
 import {
   findStartNode,
@@ -396,6 +398,59 @@ function invalidDefaultTimeoutRule(graph: Graph): Diagnostic[] {
   return [];
 }
 
+function promptFileOnNonCodergenRule(graph: Graph): Diagnostic[] {
+  const diags: Diagnostic[] = [];
+  for (const node of graph.nodes.values()) {
+    if (!node.promptFile) continue;
+    // A codergen node: explicit type=codergen OR no type with shape=box/""
+    const isCodergen = node.type === "codergen" || (!node.type && (node.shape === "box" || node.shape === ""));
+    if (!isCodergen) {
+      diags.push({
+        rule: "prompt_file_on_non_codergen",
+        severity: "warning",
+        message: `prompt_file has no effect on ${node.type || node.shape} nodes`,
+        nodeId: node.id,
+        span: node.span,
+      });
+    }
+  }
+  return diags;
+}
+
+function promptAndPromptFileConflictRule(graph: Graph): Diagnostic[] {
+  const diags: Diagnostic[] = [];
+  for (const node of graph.nodes.values()) {
+    if (node.prompt && node.promptFile) {
+      diags.push({
+        rule: "prompt_and_prompt_file_conflict",
+        severity: "warning",
+        message: "prompt and prompt_file both set; prompt takes precedence",
+        nodeId: node.id,
+        span: node.span,
+      });
+    }
+  }
+  return diags;
+}
+
+function promptFileNotFoundRule(graph: Graph): Diagnostic[] {
+  const diags: Diagnostic[] = [];
+  for (const node of graph.nodes.values()) {
+    if (!node.promptFile) continue;
+    const resolvedPath = path.join(process.cwd(), ".attractor", node.promptFile);
+    if (!fs.existsSync(resolvedPath)) {
+      diags.push({
+        rule: "prompt_file_not_found",
+        severity: "warning",
+        message: `prompt_file '${node.promptFile}' not found`,
+        nodeId: node.id,
+        span: node.span,
+      });
+    }
+  }
+  return diags;
+}
+
 function foreachKeyValidRule(graph: Graph): Diagnostic[] {
   const diags: Diagnostic[] = [];
   for (const node of graph.nodes.values()) {
@@ -443,4 +498,7 @@ export const BUILT_IN_RULES: LintRule[] = [
   invalidEdgeWeightRule,
   invalidDefaultTimeoutRule,
   foreachKeyValidRule,
+  promptFileOnNonCodergenRule,
+  promptAndPromptFileConflictRule,
+  promptFileNotFoundRule,
 ];

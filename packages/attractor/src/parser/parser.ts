@@ -69,6 +69,7 @@ function defaultGraphNode(id: string): GraphNode {
     reasoningEffort: "high",
     autoStatus: false,
     allowPartial: false,
+    promptFile: "",
     raw: new Map(),
   };
 }
@@ -511,6 +512,7 @@ class Parser {
       case "reasoning_effort": node.reasoningEffort = value; break;
       case "auto_status": node.autoStatus = value === "true"; break;
       case "allow_partial": node.allowPartial = value === "true"; break;
+      case "prompt_file": node.promptFile = value; break;
     }
   }
 
