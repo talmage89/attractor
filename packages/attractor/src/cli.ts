@@ -296,12 +296,17 @@ export async function cmdValidate(args: string[]): Promise<void> {
   applyTransforms(graph);
 
   // Resolve prompt_file paths relative to the project root.
-  // If the dotfile lives inside a .attractor/ directory (the conventional
-  // location), strip that component so we don't end up with a double
-  // ".attractor/.attractor" prefix when the rule resolves prompt_file paths.
+  // If the dotfile lives anywhere inside a .attractor/ directory tree (the
+  // conventional location), strip that component and everything below it so we
+  // don't end up with a double ".attractor/.attractor" prefix when the rule
+  // resolves prompt_file paths.  Walk up the split path to handle both direct
+  // children (.attractor/pipeline.dag) and nested descendants
+  // (.attractor/pipelines/deep/pipeline.dag).
   let validateCwd = path.dirname(path.resolve(dotfile));
-  if (path.basename(validateCwd) === ".attractor") {
-    validateCwd = path.dirname(validateCwd);
+  const cwdParts = validateCwd.split(path.sep);
+  const attIdx = cwdParts.lastIndexOf(".attractor");
+  if (attIdx >= 0) {
+    validateCwd = cwdParts.slice(0, attIdx).join(path.sep) || path.sep;
   }
   const diags = validate(graph, undefined, validateCwd);
   for (const d of diags) {

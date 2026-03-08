@@ -440,6 +440,35 @@ digraph G {
     expect(exitCode).toBe(0);
     expect(stdoutOutput).not.toContain("prompt_file_not_found");
   });
+
+  it("no false-positive prompt_file_not_found when dotfile is nested inside .attractor/ subdirectory", async () => {
+    // Nested layout: DAG at .attractor/pipelines/deep/pipeline.dag, prompt at .attractor/prompts/deep.md
+    const dotDir = path.join(tmpDir, ".attractor", "pipelines", "deep");
+    const promptDir = path.join(tmpDir, ".attractor", "prompts");
+    await fs.mkdir(dotDir, { recursive: true });
+    await fs.mkdir(promptDir, { recursive: true });
+    await fs.writeFile(path.join(promptDir, "deep.md"), "# deep prompt");
+
+    const dag = `
+digraph G {
+  s [shape=Mdiamond]
+  step [shape=box, prompt_file="prompts/deep.md"]
+  e [shape=Msquare]
+  s -> step -> e
+}
+`;
+    const dotfile = path.join(dotDir, "pipeline.dag");
+    await fs.writeFile(dotfile, dag);
+
+    let exitCode: number | undefined;
+    try {
+      await cmdValidate([dotfile]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    expect(exitCode).toBe(0);
+    expect(stdoutOutput).not.toContain("prompt_file_not_found");
+  });
 });
 
 // ---------------------------------------------------------------------------
