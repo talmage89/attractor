@@ -1,255 +1,221 @@
-# Spec: Semantic Tokens + VS Code Extension
+# Outcomes Spec: DAG Ergonomics, Resume, Prompt Files, and Safety Timeouts
 
-## Overview
+## 1. Comments in DAG Files
 
-Two deliverables:
-1. Add **semantic token support** to `attractor-lsp` so Helix and VS Code can color DAG files by semantic role
-2. Create a **minimal VS Code extension** (`packages/attractor-vscode`) that provides syntax coloring, formatting, and a custom file icon for `.dag` files
+### Current State
 
----
+The lexer (`parser/lexer.ts`) already strips `//` line comments and `/* */` block comments via `stripComments()` before tokenizing. Comments are fully supported at the parse level.
 
-## Deliverable 1: Semantic Tokens in `attractor-lsp`
+### Outcome
 
-### Goal
+No parser changes needed — comments already work. The gap is **awareness**: there's no documentation, test coverage for edge cases, or LSP support (semantic tokens ignore comment regions since they operate on post-strip tokens).
 
-Emit LSP semantic tokens that visually separate three categories:
-- **Graph-level** — the `digraph` keyword, graph name, `graph`/`node`/`edge` default keywords, graph-level attribute keys and values
-- **Node declarations** — node identifiers, their attribute keys and values, bracket delimiters
-- **Edge/flow declarations** — edge source/target identifiers, `->` arrows, edge attribute keys and values, conditions
+### Acceptance
 
-### Approach: Second-Pass Token Classifier
-
-Create a new module `packages/attractor-lsp/src/semantic-tokens.ts` that:
-
-1. Runs the existing **lexer** to get the positioned token stream (`Token[]`)
-2. Walks the token stream with a **lightweight state machine** that tracks syntactic context (are we in a graph attr block? a node declaration? an edge chain?) without building a full AST
-3. Maps each token to an LSP semantic token type + modifiers
-
-This is deliberately separate from the parser to avoid coupling highlighting concerns with graph-model construction.
-
-### State Machine Contexts
-
-The classifier tracks which syntactic region each token belongs to:
-
-| Context | Entered when | Exited when |
-|---------|-------------|-------------|
-| `graph_header` | `DIGRAPH` token seen | `LBRACE` after graph name |
-| `graph_attr` | `GRAPH` keyword followed by `LBRACKET` | matching `RBRACKET` |
-| `node_defaults` | `NODE` keyword followed by `LBRACKET` | matching `RBRACKET` |
-| `edge_defaults` | `EDGE` keyword followed by `LBRACKET` | matching `RBRACKET` |
-| `subgraph` | `SUBGRAPH` keyword | matching `RBRACE` (nesting tracked) |
-| `node_decl` | `IDENTIFIER` at statement start, not followed by `ARROW` | `RBRACKET` or next statement |
-| `edge_chain` | `IDENTIFIER` at statement start, followed by `ARROW` | `RBRACKET` or next statement |
-| `attr_list` | `LBRACKET` within any declaration | matching `RBRACKET` |
-
-Within `attr_list`, the classifier further distinguishes:
-- Attribute **keys** (IDENTIFIER before `=`)
-- Attribute **values** (token after `=`: STRING, INTEGER, FLOAT, DURATION, TRUE, FALSE, IDENTIFIER)
-
-### LSP Semantic Token Type Mapping
-
-Standard LSP token types used (these are well-supported across editors):
-
-| DAG element | LSP token type | LSP modifier | Color intent |
-|------------|----------------|-------------|-------------|
-| `digraph` keyword | `keyword` | `declaration` | Language keyword |
-| Graph name (after `digraph`) | `namespace` | `declaration` | Graph identity |
-| `graph`, `node`, `edge` keywords | `keyword` | — | Defaults keyword |
-| `subgraph` keyword | `keyword` | — | Language keyword |
-| `{`, `}` | Not emitted (left to theme) | — | — |
-| Node identifier (declaration) | `class` | `declaration` | Node identity |
-| Node identifier (in edge chain) | `class` | — | Node reference |
-| `->` arrow | `operator` | — | Flow operator |
-| `[`, `]` | Not emitted | — | — |
-| Attribute key (graph-level) | `property` | `static` | Graph config |
-| Attribute key (node) | `property` | — | Node config |
-| Attribute key (edge) | `property` | `abstract` | Edge config |
-| String value | `string` | — | Value |
-| Numeric value (INTEGER, FLOAT) | `number` | — | Value |
-| Duration value | `number` | `readonly` | Value |
-| Boolean value (TRUE, FALSE) | `keyword` | — | Constant |
-| Condition value (special) | `string` | `abstract` | Conditional |
-| `=` in attributes | Not emitted | — | — |
-| `,` separator | Not emitted | — | — |
-| Comment (// or /* */) | Not emitted (handled pre-lexer) | — | — |
-
-The modifier distinctions (`static` for graph attrs, none for node attrs, `abstract` for edge attrs) allow themes to color attribute keys differently per context, achieving the visual separation goal.
-
-### Server Changes
-
-In `packages/attractor-lsp/src/server.ts`:
-
-1. Import the new `computeSemanticTokens` function
-2. Add to `onInitialize` capabilities:
-   ```
-   semanticTokensProvider: {
-     legend: { tokenTypes: [...], tokenModifiers: [...] },
-     full: true
-   }
-   ```
-3. Add handler: `connection.languages.semanticTokens.on(full)` that calls `computeSemanticTokens(doc)`
-
-### Token Encoding
-
-LSP semantic tokens use a delta-encoded integer array: `[deltaLine, deltaStartChar, length, tokenType, tokenModifiers]` per token. The classifier will produce an intermediate list of `{ line, column, length, type, modifiers }` objects, then encode them into the delta format before returning.
-
-### Error Resilience
-
-If the lexer throws (malformed input), the classifier returns an empty token array. Partial results are acceptable — classify what's possible up to the error point, then stop. The lexer already reports error positions, so the classifier can catch and truncate.
-
-### Tests
-
-Add `packages/attractor-lsp/test/semantic-tokens.test.ts`:
-- Test that a minimal DAG (`digraph G { a -> b }`) produces correct token types
-- Test that node declarations get `class.declaration`, edge references get `class`
-- Test that attribute keys get different modifiers per context (graph vs node vs edge)
-- Test that malformed input returns empty/partial tokens without throwing
-- Test delta encoding correctness
+- [ ] Add explicit test cases for comments in various positions (inline after attributes, between node declarations, block comments spanning multiple lines)
+- [ ] Ensure the LSP doesn't choke on comments (it uses the same lexer, so this should already work — verify)
+- [ ] Document comment syntax in README
 
 ---
 
-## Deliverable 2: VS Code Extension (`packages/attractor-vscode`)
+## 2. Resume Last Pipeline (Pick Up Where It Left Off)
 
-### Package Structure
+### Current State
 
-```
-packages/attractor-vscode/
-  package.json          # Extension manifest
-  tsconfig.json
-  src/
-    extension.ts        # Activate: start LSP client
-  icons/
-    dag-icon.svg        # Custom file icon
-  language-configuration.json
-```
+`attractor run <dotfile> --resume <checkpoint-path>` restores from an explicit checkpoint file. The user must locate the checkpoint path manually. There's no shortcut to resume the most recent run.
 
-### package.json (Extension Manifest)
+### Outcome
 
-Key fields:
-- `name`: `attractor-vscode`
-- `displayName`: `Attractor DAG`
-- `publisher`: not set (not published)
-- `engines.vscode`: `^1.85.0`
-- `categories`: `["Programming Languages"]`
-- `main`: `./dist/extension.js`
-- `activationEvents`: `["onLanguage:attractor"]`
+Add `attractor run <dotfile> --resume-last` that automatically finds and resumes from the most recent run's checkpoint.
 
-#### Contributes
+### Behaviour
 
-```jsonc
-{
-  "contributes": {
-    "languages": [{
-      "id": "attractor",
-      "aliases": ["Attractor DAG", "dag"],
-      "extensions": [".dag"],
-      "configuration": "./language-configuration.json",
-      "icon": {
-        "light": "./icons/dag-icon.svg",
-        "dark": "./icons/dag-icon.svg"
-      }
-    }],
-    "iconThemes": []  // Not needed — language icon above covers file explorer
-  }
-}
-```
+1. Scan `.attractor/runs/` for directories, sorted by name descending (ISO timestamps sort lexicographically)
+2. Find the first directory containing a `checkpoint.json`
+3. Read the checkpoint — if `currentNode` is the exit node AND the pipeline completed successfully (all goal gates satisfied), print "Last pipeline completed successfully, nothing to resume" and exit 0
+4. Otherwise, resume from the checkpoint node — the pipeline picks up at the node where it stopped, with all prior state (completedNodes, context, sessions, retry counts) restored
+5. The resumed run writes to a **new** logs directory (new timestamp), not the old one. The checkpoint is the only thing inherited from the prior run
 
-No `grammars` contribution — coloring comes entirely from the LSP semantic tokens.
+### Edge Cases
 
-#### language-configuration.json
+- No prior runs → error: "No previous runs found in .attractor/runs/"
+- Prior run's checkpoint references a node no longer in the graph → existing behaviour: warning + start from beginning
+- `--resume` and `--resume-last` are mutually exclusive → error if both provided
 
-```json
-{
-  "comments": {
-    "lineComment": "//",
-    "blockComment": ["/*", "*/"]
-  },
-  "brackets": [
-    ["{", "}"],
-    ["[", "]"]
-  ],
-  "autoClosingPairs": [
-    { "open": "{", "close": "}" },
-    { "open": "[", "close": "]" },
-    { "open": "\"", "close": "\"", "notIn": ["string"] }
-  ],
-  "surroundingPairs": [
-    ["{", "}"],
-    ["[", "]"],
-    ["\"", "\""]
-  ]
-}
-```
+### Acceptance
 
-### Extension Entry Point (`src/extension.ts`)
-
-Minimal LSP client setup:
-
-1. Import `vscode-languageclient`
-2. On activate:
-   - Create `LanguageClient` with server command `attractor-lsp --stdio` (assumes on PATH)
-   - Document selector: `{ scheme: "file", language: "attractor" }`
-   - Start the client
-3. On deactivate: stop the client
-
-No custom commands, no custom views, no status bar items. Just wire up the LSP.
-
-### Dependencies
-
-```json
-{
-  "dependencies": {
-    "vscode-languageclient": "^10.0.0-next.14"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.85.0",
-    "typescript": "^5.7.0",
-    "esbuild": "^0.25.0",
-    "@vscode/vsce": "^3.0.0"
-  }
-}
-```
-
-### Build
-
-- Use esbuild to bundle `src/extension.ts` into `dist/extension.js` (single file, external `vscode`)
-- Add `package` script: `vsce package --no-dependencies` to produce `.vsix`
-- Add to root `pnpm-workspace.yaml` packages list
-
-### File Icon: Converging Arrows
-
-SVG design for `icons/dag-icon.svg`:
-- 16x16 viewBox
-- Three arrow lines converging from top-left, top-right, and bottom-left toward a central point (bottom-right area)
-- Arrow heads are small filled triangles
-- Stroke color: `#8B5CF6` (purple, visible on both light and dark backgrounds)
-- Stroke width: 1.5, rounded line caps
-- Minimal, geometric, no fills on the paths — just strokes and arrowheads
-- Designed to be legible at 16x16 in VS Code's file explorer
-
-### No TextMate Grammar
-
-The extension deliberately ships no TextMate grammar. Coloring is provided entirely by LSP semantic tokens. This means:
-- If the LSP is not running, `.dag` files appear uncolored (plain text)
-- This is acceptable because formatting and diagnostics also require the LSP
-- Avoids maintaining two separate highlighting systems
+- [ ] `--resume-last` flag added to CLI
+- [ ] Correctly identifies most recent run directory
+- [ ] Resumes from checkpoint node, skipping already-completed nodes
+- [ ] New logs directory created for resumed run
+- [ ] Errors clearly when no prior runs exist
 
 ---
 
-## Integration Checklist
+## 3. Prompt Files for DAG Nodes
 
-- [ ] `pnpm-workspace.yaml` — add `packages/attractor-vscode`
-- [ ] Root `package.json` — no changes needed (recursive scripts already cover all packages)
-- [ ] `attractor-lsp/package.json` — no new dependencies (reuses existing `attractor` lexer)
-- [ ] Helix `languages.toml` — no changes needed (already configured, will pick up semantic tokens automatically once LSP advertises them)
+### Current State
 
-## Order of Implementation
+Node prompts are specified inline: `plan [prompt = "Read .attractor/prompts/sprint/plan.md and follow the instructions."]`. This is a workaround — the prompt text tells CC to go read a file, rather than providing the prompt content directly.
 
-1. Semantic tokens module (`semantic-tokens.ts`) + tests
-2. Wire into LSP server (`server.ts` capability + handler)
-3. Verify in Helix (restart editor, confirm colors)
-4. Create VS Code extension package scaffold
-5. Extension entry point (LSP client wiring)
-6. SVG icon
-7. Build + produce `.vsix`
-8. Install and verify in VS Code
+### Outcome
+
+Add a `prompt_file` attribute that reads prompt content from a file at execution time. Path is relative to the **project root** (the directory containing the `.attractor/` directory).
+
+### Syntax
+
+```dot
+plan [shape = "box", prompt_file = "prompts/sprint/plan.md", llm_model = "opus"]
+```
+
+### Behaviour
+
+1. **Parser**: Recognize `prompt_file` as a node attribute, store as `GraphNode.promptFile: string` (raw path as written)
+2. **CodergenHandler**: At execution time, if `node.promptFile` is set and `node.prompt` is empty:
+   - Resolve the path relative to `config.cwd` (which is the project root)
+   - Read the file contents
+   - Use contents as the prompt text
+3. **Precedence**: `prompt` takes priority over `prompt_file`. If both are set, `prompt` wins and a validation warning is emitted
+4. **Variable expansion**: `$goal` and any other transform-time variable substitution still applies to the file contents after reading
+5. **Missing file**: If the file doesn't exist at execution time, the handler emits a `fail` outcome with a clear error message (not a crash)
+
+### Validation Rules
+
+- `prompt_file` on a non-codergen node (e.g., tool, start, exit) → `[warning]` "prompt_file has no effect on {type} nodes"
+- Both `prompt` and `prompt_file` set → `[warning]` "prompt and prompt_file both set; prompt takes precedence"
+- The validator does **not** check file existence (files may be generated by earlier pipeline stages)
+
+### Acceptance
+
+- [ ] `prompt_file` attribute parsed and stored on `GraphNode`
+- [ ] CodergenHandler reads file and uses contents as prompt
+- [ ] `prompt` takes precedence when both are set
+- [ ] Variable expansion applies to file contents
+- [ ] Missing file at runtime → fail outcome, not crash
+- [ ] Validation warnings for conflicts and misuse
+- [ ] LSP semantic tokens classify `prompt_file` values as `string` (path)
+
+---
+
+## 4. Default Graph-Wide Codergen Timeout
+
+### Current State
+
+Node-level timeouts are opt-in via `timeout = "15m"` on individual nodes. There is no graph-wide default — a node without an explicit timeout runs indefinitely.
+
+### Outcome
+
+Add a built-in default timeout of **1 hour** for all codergen nodes that don't specify their own timeout. Make this configurable via a graph attribute.
+
+### Syntax
+
+```dot
+graph [default_timeout = "30m"]
+```
+
+Follows the existing `default_*` pattern (`default_max_retry`, `default_fidelity`).
+
+### Behaviour
+
+1. **Parser**: Recognize `default_timeout` in `applyGraphAttributeKV`, parse via existing `parseTimeout()`, store as `GraphAttributes.defaultTimeout: number | null`
+2. **CodergenHandler**: When building CC options, use `node.timeout ?? graph.attributes.defaultTimeout ?? 3_600_000` (1h fallback)
+3. **ToolHandler**: Also respects `default_timeout` — falls back to it before the existing 30s hardcoded default
+4. **Node-level override**: `timeout` on a node always wins over the graph default
+
+### Validation Rules
+
+- Non-positive `default_timeout` → `[error]` "default_timeout must be a positive duration"
+
+### Acceptance
+
+- [ ] `default_timeout` graph attribute parsed and stored
+- [ ] Codergen nodes without explicit timeout use graph default, falling back to 1h
+- [ ] Node-level `timeout` overrides graph default
+- [ ] Validation rejects non-positive values
+
+---
+
+## 5. Watchdog (Idle Process Detection)
+
+### Current State
+
+No idle detection. A CC process can hang (alive but producing no SDK events) and block the pipeline until an explicit timeout fires — which could be up to 30m+ away.
+
+### Design
+
+Full design in [watchdog-design.md](watchdog-design.md). Summary below.
+
+### Syntax
+
+```dot
+graph [watchdog_idle = "5m", watchdog_poll = "30s"]
+```
+
+### Behaviour
+
+1. **Opt-in only** — watchdog does not run unless `watchdog_idle` is set
+2. **Polling**: A `setInterval` at `watchdog_poll` (default 30s when idle is set) checks each active node's `lastActivity` timestamp
+3. **Activity tracking**: Every `cc_event` and `stage_started` event updates the node's last-activity timestamp
+4. **Kill**: If a node has been idle longer than `watchdog_idle`, its `AbortController` fires, killing the CC process. A `warning` event is emitted
+5. **Cleanup**: Timer is cleared at `pipeline_completed`
+
+### Integration Points
+
+- **runner.ts**: Owns the watchdog lifecycle (start after `pipeline_started`, clear at `pipeline_completed`)
+- **wrappedOnEvent**: Updates `lastActivity` on `cc_event` and `stage_started`
+- **Per-node AbortController**: Created before each node execution, registered with watchdog, threaded through `RunConfig.abortSignal` to `CCBackendOptions`
+- **CodergenHandler**: Combines watchdog signal with timeout signal via event listener
+- **ParallelHandler**: Branches get individual tracking (each branch node has a unique ID)
+
+### Validation Rules
+
+- `watchdog_poll` without `watchdog_idle` → `[warning]` "watchdog_poll has no effect without watchdog_idle"
+- `watchdog_idle` < `watchdog_poll` → `[warning]` "watchdog_idle shorter than poll interval; idle nodes may not be detected promptly"
+- Non-positive values → `[error]` "watchdog_idle must be a positive duration"
+
+### Acceptance
+
+- [ ] `watchdog_idle` and `watchdog_poll` graph attributes parsed
+- [ ] Watchdog only activates when `watchdog_idle` is set
+- [ ] Active nodes tracked via event stream heartbeats
+- [ ] Idle nodes killed via AbortController after configured duration
+- [ ] Warning event emitted on watchdog kill
+- [ ] Parallel branches tracked independently
+- [ ] Timer cleaned up at pipeline end
+- [ ] Validation warnings for misconfiguration
+
+---
+
+## 6. Break on Result in `runCC`
+
+### Current State
+
+In `cc-backend.ts`, the `for await` loop continues iterating the SDK generator after receiving a `result` message. The result message is terminal — no meaningful messages follow it. If the generator hangs (doesn't close cleanly), the entire node blocks indefinitely.
+
+### Outcome
+
+Break out of the loop immediately after capturing the result message.
+
+### Change
+
+```typescript
+// cc-backend.ts, line 77-78
+} else if (msg.type === "result") {
+  resultMessage = msg;
+  break;  // Result is terminal — don't wait for generator to close
+}
+```
+
+### Why This Is Safe
+
+- The `result` message is the final semantic message from the SDK
+- The `finally` block still runs (clears timeout)
+- `sessionId` is captured from the earlier `init` message
+- All event callbacks have already fired for prior messages
+- This is a defence-in-depth fix: it mitigates hangs even without the watchdog
+
+### Acceptance
+
+- [ ] `break` added after `resultMessage = msg`
+- [ ] Existing tests continue to pass
+- [ ] Timeout cleanup still fires (verified by `finally` block)
