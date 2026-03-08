@@ -143,7 +143,7 @@ No idle detection. A CC process can hang (alive but producing no SDK events) and
 
 ### Design
 
-Full design in [watchdog-design.md](watchdog-design.md). Summary below.
+Full design in [artifacts/watchdog-design.md](artifacts/watchdog-design.md). Summary below.
 
 ### Syntax
 
