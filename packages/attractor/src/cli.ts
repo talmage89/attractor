@@ -185,8 +185,16 @@ export async function cmdRun(args: string[]): Promise<void> {
           return n.shape === "Msquare" || n.type === "exit" || n.id === "exit" || n.id === "end";
         })();
       if (isExitNode) {
-        process.stdout.write("Last pipeline completed successfully, nothing to resume\n");
-        process.exit(0);
+        // Also verify all goal gates are satisfied. A failed pipeline (e.g. goal
+        // gate failure) also ends with currentNode at the exit node, so we must
+        // check nodeOutcomes before reporting "completed successfully".
+        const allGatesSatisfied = [...graph.nodes.values()]
+          .filter((n) => n.goalGate)
+          .every((n) => (checkpoint.nodeOutcomes[n.id] as { status: string } | undefined)?.status === "success");
+        if (allGatesSatisfied) {
+          process.stdout.write("Last pipeline completed successfully, nothing to resume\n");
+          process.exit(0);
+        }
       }
     } catch {
       // If checkpoint can't be read, just pass it to run() which will handle the error

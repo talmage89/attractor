@@ -688,6 +688,50 @@ describe("cmdRun --resume-last", () => {
     expect(stdoutOutput).toContain("nothing to resume");
   });
 
+  it("does NOT say 'nothing to resume' when exit node reached but goal gate failed", async () => {
+    // Pipeline with a goal_gate=true node. If that node failed, the pipeline
+    // failed even though currentNode points to the exit node.
+    const dagWithGate = `
+digraph G {
+  s [shape=Mdiamond]
+  step1 [goal_gate=true]
+  e [shape=Msquare]
+  s -> step1
+  step1 -> e
+}
+`;
+    const dotfile = path.join(tmpDir, "gate.dot");
+    await fs.writeFile(dotfile, dagWithGate);
+    const logsRoot = path.join(tmpDir, "logs");
+
+    // Checkpoint: at exit node "e", but step1 (goal_gate=true) failed
+    const runDir = path.join(tmpDir, ".attractor", "runs", "2025-01-01T00-00-00-000Z");
+    await fs.mkdir(runDir, { recursive: true });
+    await fs.writeFile(
+      path.join(runDir, "checkpoint.json"),
+      JSON.stringify({
+        timestamp: Date.now(),
+        currentNode: "e",
+        completedNodes: ["step1"],
+        nodeOutcomes: { step1: { status: "fail" } },
+        nodeRetries: {},
+        contextValues: {},
+        sessionMap: {},
+      })
+    );
+
+    process.chdir(tmpDir);
+    // Should NOT exit 0 with "nothing to resume" — pipeline actually failed
+    let exitCode: number | undefined;
+    try {
+      await cmdRun([dotfile, "--cwd", tmpDir, "--logs", logsRoot, "--resume-last", "--auto-approve"]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    // Must not report "nothing to resume"
+    expect(stdoutOutput).not.toContain("nothing to resume");
+  });
+
   it("picks the most recent run directory (lexicographic descending)", async () => {
     const dotfile = path.join(tmpDir, "valid.dot");
     await fs.writeFile(dotfile, VALID_PIPELINE);
