@@ -412,6 +412,34 @@ describe("cmdValidate", () => {
     }
     expect(exitCode).toBe(0);
   });
+
+  it("no false-positive prompt_file_not_found when dotfile is inside .attractor/", async () => {
+    // Conventional layout: DAG at .attractor/pipeline.dag, prompt at .attractor/prompts/step.md
+    const dotDir = path.join(tmpDir, ".attractor");
+    const promptDir = path.join(dotDir, "prompts");
+    await fs.mkdir(promptDir, { recursive: true });
+    await fs.writeFile(path.join(promptDir, "step.md"), "# step prompt");
+
+    const dag = `
+digraph G {
+  s [shape=Mdiamond]
+  step [shape=box, prompt_file="prompts/step.md"]
+  e [shape=Msquare]
+  s -> step -> e
+}
+`;
+    const dotfile = path.join(dotDir, "pipeline.dag");
+    await fs.writeFile(dotfile, dag);
+
+    let exitCode: number | undefined;
+    try {
+      await cmdValidate([dotfile]);
+    } catch (e) {
+      exitCode = (e as ExitError).code;
+    }
+    expect(exitCode).toBe(0);
+    expect(stdoutOutput).not.toContain("prompt_file_not_found");
+  });
 });
 
 // ---------------------------------------------------------------------------
