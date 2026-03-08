@@ -77,7 +77,7 @@ export class ToolHandler implements Handler {
   async execute(
     node: GraphNode,
     _context: Context,
-    _graph: Graph,
+    graph: Graph,
     config: RunConfig
   ): Promise<Outcome> {
     // $goal substitution is applied to tool_command by applyTransforms before
@@ -87,7 +87,7 @@ export class ToolHandler implements Handler {
       return { status: "fail", failureReason: "No tool_command specified" };
     }
 
-    const timeoutMs = node.timeout ?? 30_000;
+    const timeoutMs = node.timeout ?? graph.attributes?.defaultTimeout ?? 30_000;
     const result = await runShellCommand(command, { cwd: config.cwd, timeoutMs });
 
     const output = result.stdout.slice(0, MAX_OUTPUT_LENGTH);

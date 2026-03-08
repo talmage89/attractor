@@ -605,6 +605,66 @@ describe("CodergenHandler", () => {
     expect(options.systemPromptAppend).toContain("Done");
     expect(options.systemPromptAppend).toContain("Fix issues");
   });
+
+  it("uses node timeout when set", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test", default_timeout="30m"]
+        s [shape=Mdiamond]
+        work [shape=box, prompt="Do work", timeout="5m"]
+        e [shape=Msquare]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult());
+    const handler = new CodergenHandler(sessionManager);
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, makeConfig() as any);
+
+    const [, options] = mockRunCC.mock.calls[0];
+    // node timeout (5m = 300000ms) wins over graph default (30m)
+    expect(options.timeout).toBe(300_000);
+  });
+
+  it("uses graph default_timeout when node has no timeout", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test", default_timeout="45m"]
+        s [shape=Mdiamond]
+        work [shape=box, prompt="Do work"]
+        e [shape=Msquare]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult());
+    const handler = new CodergenHandler(sessionManager);
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, makeConfig() as any);
+
+    const [, options] = mockRunCC.mock.calls[0];
+    // graph default_timeout = 45m = 2700000ms
+    expect(options.timeout).toBe(2_700_000);
+  });
+
+  it("falls back to 1h when neither node nor graph specifies timeout", async () => {
+    const graph = parse(`
+      digraph G {
+        graph [goal="Test"]
+        s [shape=Mdiamond]
+        work [shape=box, prompt="Do work"]
+        e [shape=Msquare]
+        s -> work -> e
+      }
+    `);
+
+    mockRunCC.mockResolvedValueOnce(makeCCResult());
+    const handler = new CodergenHandler(sessionManager);
+    await handler.execute(graph.nodes.get("work")!, new Context(), graph, makeConfig() as any);
+
+    const [, options] = mockRunCC.mock.calls[0];
+    // No timeout set anywhere → 1h = 3600000ms
+    expect(options.timeout).toBe(3_600_000);
+  });
 });
 
 describe("buildStatusInstruction", () => {
@@ -643,6 +703,7 @@ describe("buildStatusInstruction", () => {
         retryTarget: "",
         fallbackRetryTarget: "",
         defaultFidelity: "",
+        defaultTimeout: null,
         raw: new Map(),
       },
       nodes: new Map(),

@@ -21,6 +21,7 @@ export interface GraphAttributes {
   retryTarget: string;
   fallbackRetryTarget: string;
   defaultFidelity: string;
+  defaultTimeout: number | null;
   raw: Map<string, string>;
 }
 

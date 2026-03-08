@@ -331,6 +331,55 @@ describe("parser", () => {
     });
   });
 
+  describe("default_timeout parsing", () => {
+    it("parses default_timeout as milliseconds", () => {
+      const graph = parse(`
+        digraph G {
+          default_timeout = "30m"
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      expect(graph.attributes.defaultTimeout).toBe(1_800_000); // 30 * 60000
+    });
+
+    it("defaults to null when default_timeout is not set", () => {
+      const graph = parse(`
+        digraph G {
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      expect(graph.attributes.defaultTimeout).toBeNull();
+    });
+
+    it("parses default_timeout in seconds", () => {
+      const graph = parse(`
+        digraph G {
+          default_timeout = "3600s"
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      expect(graph.attributes.defaultTimeout).toBe(3_600_000);
+    });
+
+    it("parses default_timeout as plain millisecond integer", () => {
+      const graph = parse(`
+        digraph G {
+          default_timeout = "5000"
+          start [shape=Mdiamond]
+          exit  [shape=Msquare]
+          start -> exit
+        }
+      `);
+      expect(graph.attributes.defaultTimeout).toBe(5000);
+    });
+  });
+
   describe("default_max_retry parsing (BUG-018)", () => {
     it("falls back to default (50) when default_max_retry is a non-integer string", () => {
       const graph = parse(`

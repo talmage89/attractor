@@ -44,6 +44,7 @@ function defaultGraphAttributes(): GraphAttributes {
     retryTarget: "",
     fallbackRetryTarget: "",
     defaultFidelity: "",
+    defaultTimeout: null,
     raw: new Map(),
   };
 }
@@ -568,6 +569,13 @@ class Parser {
       case "retry_target": this.graph.attributes.retryTarget = value; break;
       case "fallback_retry_target": this.graph.attributes.fallbackRetryTarget = value; break;
       case "default_fidelity": this.graph.attributes.defaultFidelity = value; break;
+      case "default_timeout": {
+        const parsed = this.parseTimeout(value);
+        if (parsed !== null) {
+          this.graph.attributes.defaultTimeout = parsed;
+        }
+        break;
+      }
     }
   }
 }

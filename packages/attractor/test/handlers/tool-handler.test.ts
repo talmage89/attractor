@@ -137,4 +137,32 @@ describe("ToolHandler", () => {
     expect(outcome.status).toBe("fail");
     expect(elapsed).toBeLessThan(5000); // Should not have waited the full 10s
   });
+
+  it("uses graph default_timeout when node has no explicit timeout", async () => {
+    const handler = new ToolHandler();
+    // Command that sleeps 10s — should be killed by the 500ms graph default
+    const node = makeToolNode({ tool_command: "sleep 10" }); // node.timeout = null
+    const graphWithDefault = {
+      attributes: { defaultTimeout: 500 },
+    } as any;
+    const start = Date.now();
+    const outcome = await handler.execute(node, new Context(), graphWithDefault, config(tmpDir) as any);
+    const elapsed = Date.now() - start;
+    expect(outcome.status).toBe("fail");
+    expect(elapsed).toBeLessThan(5000);
+  });
+
+  it("node timeout overrides graph default_timeout", async () => {
+    const handler = new ToolHandler();
+    // Node has a 500ms timeout; graph has a 60s default — node wins
+    const node = makeToolNode({ tool_command: "sleep 10", timeout: 500 });
+    const graphWithDefault = {
+      attributes: { defaultTimeout: 60_000 },
+    } as any;
+    const start = Date.now();
+    const outcome = await handler.execute(node, new Context(), graphWithDefault, config(tmpDir) as any);
+    const elapsed = Date.now() - start;
+    expect(outcome.status).toBe("fail");
+    expect(elapsed).toBeLessThan(5000);
+  });
 });

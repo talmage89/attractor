@@ -380,6 +380,22 @@ function promptOnLlmNodesRule(graph: Graph): Diagnostic[] {
   return diags;
 }
 
+function invalidDefaultTimeoutRule(graph: Graph): Diagnostic[] {
+  const raw = graph.attributes.raw.get("default_timeout");
+  if (raw === undefined) return [];
+  const value = graph.attributes.defaultTimeout;
+  if (value !== null && value <= 0) {
+    return [
+      {
+        rule: "invalid_default_timeout",
+        severity: "error",
+        message: "default_timeout must be a positive duration",
+      },
+    ];
+  }
+  return [];
+}
+
 function foreachKeyValidRule(graph: Graph): Diagnostic[] {
   const diags: Diagnostic[] = [];
   for (const node of graph.nodes.values()) {
@@ -425,5 +441,6 @@ export const BUILT_IN_RULES: LintRule[] = [
   promptOnLlmNodesRule,
   invalidDefaultMaxRetryRule,
   invalidEdgeWeightRule,
+  invalidDefaultTimeoutRule,
   foreachKeyValidRule,
 ];

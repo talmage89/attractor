@@ -890,6 +890,66 @@ describe("validation", () => {
     });
   });
 
+  describe("invalidDefaultTimeoutRule", () => {
+    it("errors when default_timeout is zero", () => {
+      const graph = parse(`
+        digraph G {
+          default_timeout = "0s"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_default_timeout");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("error");
+      expect(rule[0].message).toContain("positive duration");
+    });
+
+    it("errors when default_timeout is negative", () => {
+      const graph = parse(`
+        digraph G {
+          default_timeout = "-5m"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_default_timeout");
+      expect(rule).toHaveLength(1);
+      expect(rule[0].severity).toBe("error");
+    });
+
+    it("does not error when default_timeout is a positive duration", () => {
+      const graph = parse(`
+        digraph G {
+          default_timeout = "30m"
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_default_timeout");
+      expect(rule).toHaveLength(0);
+    });
+
+    it("does not error when default_timeout is absent", () => {
+      const graph = parse(`
+        digraph G {
+          s [shape=Mdiamond]
+          e [shape=Msquare]
+          s -> e
+        }
+      `);
+      const diags = validate(graph);
+      const rule = diags.filter(d => d.rule === "invalid_default_timeout");
+      expect(rule).toHaveLength(0);
+    });
+  });
+
   describe("valid pipelines pass cleanly", () => {
     it("three-node linear pipeline has no errors", () => {
       const graph = parse(`
