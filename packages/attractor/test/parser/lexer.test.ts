@@ -114,4 +114,30 @@ describe("lexer", () => {
     expect(tokens[0]).toMatchObject({ kind: "INTEGER", value: "-1" });
     expect(tokens[1]).toMatchObject({ kind: "IDENTIFIER", value: "abc" });
   });
+
+  it("preserves // inside a quoted string (does not treat as comment)", () => {
+    const tokens = lex(`"use // to comment code"`);
+    expect(tokens[0].kind).toBe("STRING");
+    expect(tokens[0].value).toBe("use // to comment code");
+  });
+
+  it("preserves URL with // inside a quoted string", () => {
+    const tokens = lex(`"See https://example.com for docs"`);
+    expect(tokens[0].kind).toBe("STRING");
+    expect(tokens[0].value).toBe("See https://example.com for docs");
+  });
+
+  it("preserves /* */ inside a quoted string (does not strip content)", () => {
+    const tokens = lex(`"Read /* important.md */ and report"`);
+    expect(tokens[0].kind).toBe("STRING");
+    expect(tokens[0].value).toBe("Read /* important.md */ and report");
+  });
+
+  it("preserves // inside quoted string but strips // outside quoted string on same line", () => {
+    const tokens = lex(`a = "url: http://x.com" // end comment\nb`);
+    const strings = tokens.filter(t => t.kind === "STRING");
+    expect(strings[0].value).toBe("url: http://x.com");
+    const ids = tokens.filter(t => t.kind === "IDENTIFIER");
+    expect(ids.map(t => t.value)).toEqual(["a", "b"]);
+  });
 });

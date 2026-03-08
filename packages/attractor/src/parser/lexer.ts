@@ -16,8 +16,28 @@ function stripComments(source: string): string {
   const result: string[] = [];
   let i = 0;
   while (i < source.length) {
+    // Quoted string — pass through verbatim, handling escape sequences
+    if (source[i] === '"') {
+      result.push(source[i]);
+      i++;
+      while (i < source.length && source[i] !== '"') {
+        if (source[i] === '\\' && i + 1 < source.length) {
+          result.push(source[i]);
+          i++;
+          result.push(source[i]);
+          i++;
+        } else {
+          result.push(source[i]);
+          i++;
+        }
+      }
+      if (i < source.length) {
+        result.push(source[i]); // closing quote
+        i++;
+      }
+    }
     // Line comment
-    if (source[i] === "/" && source[i + 1] === "/") {
+    else if (source[i] === "/" && source[i + 1] === "/") {
       while (i < source.length && source[i] !== "\n") {
         result.push(" ");
         i++;
