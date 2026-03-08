@@ -23,7 +23,7 @@ The spec contains 6 feature sections. None declare numbered phases, so the plan 
 
 ## Phase 2: Comment Test Coverage
 
-**Goal:** Add explicit test cases for comments in various positions. Verify LSP doesn't choke on comments.
+**Goal:** Add explicit test cases for comments in various positions. Verify LSP doesn't choke on comments. Document comment syntax in README.
 
 **Files to modify:**
 - `packages/attractor/test/parser/parser.test.ts` (or new `test/parser/comments.test.ts`) — add tests for:
@@ -33,10 +33,12 @@ The spec contains 6 feature sections. None declare numbered phases, so the plan 
   - Comments inside attribute blocks
   - Comments between edge declarations
 - Verify LSP lexer handles comments (read LSP source, confirm it uses same `stripComments`)
+- `packages/attractor/README.md` — document comment syntax (`//` line comments, `/* */` block comments) with examples
 
 **Acceptance criteria:**
 - Explicit test cases for comments in various positions (inline, between declarations, block comments)
 - LSP confirmed to use the same lexer (no choke)
+- Comment syntax documented in README
 - All tests pass
 
 **Dependencies:** None
@@ -94,6 +96,7 @@ The spec contains 6 feature sections. None declare numbered phases, so the plan 
 - Variable expansion (`$goal`) applies to file contents
 - Missing file at runtime → fail outcome, not crash
 - Validation warns on: missing files, conflicts (both prompt and prompt_file), misuse (non-codergen nodes)
+- LSP semantic tokens verified: `prompt_file` STRING values already classified as `string` type (no code change needed — LSP `semantic-tokens.ts` classifies all STRING attr values as `string` by default)
 - All tests pass
 
 **Dependencies:** None
